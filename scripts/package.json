@@ -1,0 +1,21 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^4.3.5"
+  },
+  "dependencies": {
+    "@terra-money/terra.js": "^2.0.0-beta.11",
+    "chai": "^4.3.4",
+    "chai-as-promised": "^7.1.1",
+    "chalk": "^4.1.2"
+  }
+}
