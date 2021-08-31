@@ -1,11 +1,7 @@
 pub mod contract;
+pub mod error;
 pub mod state;
-
-mod error;
-mod response;
+pub mod response;
 
 #[cfg(test)]
-mod testing;
-
-#[cfg(test)]
-mod mock_querier;
+pub mod testing;

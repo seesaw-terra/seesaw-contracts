@@ -1,175 +1,115 @@
-# TerraSwap Pair
+# CosmWasm Starter Pack
 
-## Handlers
+This is a template to build smart contracts in Rust to run inside a
+[Cosmos SDK](https://github.com/cosmos/cosmos-sdk) module on all chains that enable it.
+To understand the framework better, please read the overview in the
+[cosmwasm repo](https://github.com/CosmWasm/cosmwasm/blob/master/README.md),
+and dig into the [cosmwasm docs](https://www.cosmwasm.com).
+This assumes you understand the theory and just want to get coding.
 
-### Initialize
+## Creating a new repo from template
 
-This is mainly used from terraswap factory contract to create new terraswap pair. It initialize all swap created parameters which can be updated later with owner key.
+Assuming you have a recent version of rust and cargo (v1.51.0+) installed
+(via [rustup](https://rustup.rs/)),
+then the following should get you a new repo to start a contract:
 
-It creates liquidity token contract as init response, and execute init hook to register created liquidity token contract to self.
+First, install
+[cargo-generate](https://github.com/ashleygwilliams/cargo-generate).
+Unless you did that before, run this line now:
 
-```rust
-{
-    /// Asset infos
-    pub asset_infos: [AssetInfo; 2],
-    /// Token code ID for liqudity token creation
-    pub token_code_id: u64,
-    /// Hook for post initalization
-    pub init_hook: Option<InitHook>,
-}
+```sh
+cargo install cargo-generate --features vendored-openssl
 ```
 
-### Liquidity Provider
-
-The contract has two types of pool, the one is collateral and the other is asset pool. A user can provide liquidity to each pool by sending `provide_liquidity` msgs and also can withdraw with `withdraw_liquidity` msgs.
-
-Whenever liquidity is deposited into a pool, special tokens known as liquidity tokens are minted to the provider’s address, in proportion to how much liquidity they contributed to the pool. These tokens are a representation of a liquidity provider’s contribution to a pool. Whenever a trade occurs, the `lp_commission%` of fee is distributed pro-rata to all LPs in the pool at the moment of the trade. To receive the underlying liquidity back, plus commission fees that were accrued while their liquidity was locked, LPs must burn their liquidity tokens.
-
-When providing liquidity from a smart contract, the most important thing to keep in mind is that tokens deposited into a pool at any rate other than the current oracle price ratio are vulnerable to being arbitraged. As an example, if the ratio of x:y in a pair is 10:2 (i.e. the price is 5), and someone naively adds liquidity at 5:2 (a price of 2.5), the contract will simply accept all tokens (changing the price to 3.75 and opening up the market to arbitrage), but only issue pool tokens entitling the sender to the amount of assets sent at the proper ratio, in this case 5:1. To avoid donating to arbitrageurs, it is imperative to add liquidity at the current price. Luckily, it’s easy to ensure that this condition is met!
-
-> Note before executing the `provide_liqudity` operation, a user must allow the contract to use the liquidity amount of asset in the token contract.
-
-#### Slipage Tolerance
-
-If a user specify the slipage tolerance at provide liquidity msg, the contract restricts the operation when the exchange rate is dropped more than the tolerance.
-
-So, at a 1% tolerance level, if a user sends a transaction with 200 UST and 1 ASSET, amountUSTMin should be set to e.g. 198 UST, and amountASSETMin should be set to .99 ASSET. This means that, at worst, liquidity will be added at a rate between 198 ASSET/1 UST and 202.02 UST/1 ASSET (200 UST/.99 ASSET).
-
-#### Request Format
-
-- Provide Liquidity
-
-  1. Without Slippage Tolerance
-
-  ```json
-  {
-    "provide_liquidity": {
-      "assets": [
-        {
-          "info": {
-            "token": {
-              "contract_addr": "terra~~"
-            }
-          },
-          "amount": "1000000"
-        },
-        {
-          "info": {
-            "native_token": {
-              "denom": "uusd"
-            }
-          },
-          "amount": "1000000"
-        }
-      ]
-    }
-  }
-  ```
-
-  2. With Slippage Tolerance
-
-  ```json
-  {
-    "provide_liquidity": {
-      "assets": [
-        {
-          "info": {
-            "token": {
-              "contract_addr": "terra~~"
-            }
-          },
-          "amount": "1000000"
-        },
-        {
-          "info": {
-            "native_token": {
-              "denom": "uusd"
-            }
-          },
-          "amount": "1000000"
-        }
-      ]
-    },
-    "slippage_tolerance": "0.01"
-  }
-  ```
-
-- Withdraw Liquidity (must be sent to liquidity token contract)
-  ```json
-  {
-    "withdraw_liquidity": {}
-  }
-  ```
-
-### Swap
-
-Any user can swap an asset by sending `swap` or invoking `send` msg to token contract with `swap` hook message.
-
-- Native Token => Token
-
-  ```json
-  {
-      "swap": {
-          "offer_asset": {
-              "info": {
-                  "native_token": {
-                      "denom": String
-                  }
-              },
-              "amount": Uint128
-          },
-          "belief_price": Option<Decimal>,
-          "max_spread": Option<Decimal>,
-          "to": Option<HumanAddr>
-      }
-  }
-  ```
-
-- Token => Native Token
-
-  **Must be sent to token contract**
-
-  ```json
-  {
-      "send": {
-          "contract": HumanAddr,
-          "amount": Uint128,
-          "msg": Binary({
-              "swap": {
-                  "belief_price": Option<Decimal>,
-                  "max_spread": Option<Decimal>,
-                  "to": Option<HumanAddr>
-              }
-          })
-      }
-  }
-  ```
-
-#### Swap Spread
-
-The spread is determined with following uniswap mechanism:
-
-```rust
-// -max_minus_spread < spread < max_spread
-// minus_spread means discount rate.
-// Ensure `asset pool * collateral pool = constant product`
-let cp = Uint128(offer_pool.u128() * ask_pool.u128());
-let return_amount = offer_amount * exchange_rate;
-let return_amount = (ask_pool - cp.multiply_ratio(1u128, offer_pool + offer_amount))?;
+Now, use it to create your new contract.
+Go to the folder in which you want to place it and run:
 
 
-// calculate spread & commission
-let spread_amount: Uint128 =
-    (offer_amount * Decimal::from_ratio(ask_pool, offer_pool) - return_amount)?;
-let lp_commission: Uint128 = return_amount * config.lp_commission;
-let owner_commission: Uint128 = return_amount * config.owner_commission;
+**0.14 (latest)**
 
-// commission will be absorbed to pool
-let return_amount: Uint128 =
-    (return_amount - (lp_commission + owner_commission)).unwrap();
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --name PROJECT_NAME
+````
+
+**0.13**
+
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.13 --name PROJECT_NAME
+````
+
+**0.12**
+
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.12 --name PROJECT_NAME
 ```
 
-#### Commission
+**0.11**
 
-The `lp_commission` remains in the swap pool, which is fixed to `0.3%`, causing a permanent increase in the constant product K. The value of this permanently increased pool goes to all LPs.
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.11 --name PROJECT_NAME
+```
+**0.10**
 
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.10 --name PROJECT_NAME
+```
+
+**0.9**
+
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.9 --name PROJECT_NAME
+```
+
+**0.8**
+
+```sh
+cargo generate --git https://github.com/CosmWasm/cosmwasm-template.git --branch 0.8 --name PROJECT_NAME
+```
+
+You will now have a new folder called `PROJECT_NAME` (I hope you changed that to something else)
+containing a simple working contract and build system that you can customize.
+
+## Create a Repo
+
+After generating, you have a initialized local git repo, but no commits, and no remote.
+Go to a server (eg. github) and create a new upstream repo (called `YOUR-GIT-URL` below).
+Then run the following:
+
+```sh
+# this is needed to create a valid Cargo.lock file (see below)
+cargo check
+git branch -M main
+git add .
+git commit -m 'Initial Commit'
+git remote add origin YOUR-GIT-URL
+git push -u origin master
+```
+
+## CI Support
+
+We have template configurations for both [GitHub Actions](.github/workflows/Basic.yml)
+and [Circle CI](.circleci/config.yml) in the generated project, so you can
+get up and running with CI right away.
+
+One note is that the CI runs all `cargo` commands
+with `--locked` to ensure it uses the exact same versions as you have locally. This also means
+you must have an up-to-date `Cargo.lock` file, which is not auto-generated.
+The first time you set up the project (or after adding any dep), you should ensure the
+`Cargo.lock` file is updated, so the CI will test properly. This can be done simply by
+running `cargo check` or `cargo unit-test`.
+
+## Using your project
+
+Once you have your custom repo, you should check out [Developing](./Developing.md) to explain
+more on how to run tests and develop code. Or go through the
+[online tutorial](https://www.cosmwasm.com/docs/getting-started/intro) to get a better feel
+of how to develop.
+
+[Publishing](./Publishing.md) contains useful information on how to publish your contract
+to the world, once you are ready to deploy it on a running blockchain. And
+[Importing](./Importing.md) contains information about pulling in other contracts or crates
+that have been published.
+
+Please replace this README file with information about your specific project. You can keep
+the `Developing.md` and `Publishing.md` files as useful referenced, but please set some
+proper description in the README.

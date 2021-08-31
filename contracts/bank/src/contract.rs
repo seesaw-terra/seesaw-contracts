@@ -9,7 +9,7 @@ use cw20::{MinterResponse, Cw20ReceiveMsg};
 use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg, StateResponse};
 
 use crate::error::ContractError;
-use crate::state::{CONFIG, Config, POSITIONS, STATE, State, read_markets};
+use crate::state::{CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market, read_markets};
 use crate::response::MsgInstantiateContractResponse;
 use crate::deposit::{ add_margin };
 
@@ -52,6 +52,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env,info, msg),
         ExecuteMsg::DepositStable { market_addr } => add_margin(deps, env, info, market_addr),
+        ExecuteMsg::RegisterMarket { contract_addr } => register_market(deps, env, info, contract_addr),
     }
 }
 
@@ -73,38 +74,26 @@ pub fn receive_cw20(
     }
 }
 
-// pub fn register_worker(
-//     deps: DepsMut,
-//     _env: Env,
-//     _info: MessageInfo,
-//     contract_addr: Addr,
-//     asset_infos: [AssetInfo; 2]
-// ) -> Result<Response, ContractError> {
-//     let raw_infos = [
-//         asset_infos[0].to_raw(deps.api)?,
-//         asset_infos[1].to_raw(deps.api)?
-//     ];
+pub fn register_market(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    contract_addr: Addr,
+) -> Result<Response, ContractError> {
 
-//     let pair_key = contract_addr.as_bytes();
-//     if let Ok(Some(_)) = WORKERS.may_load(deps.storage, &pair_key) {
-//         return Err(ContractError::Std(StdError::generic_err("Worker already exists")));
-//     }
+    let key = contract_addr.as_bytes();
+    if let Ok(Some(_)) = MARKETS.may_load(deps.storage, &key) {
+        return Err(ContractError::Std(StdError::generic_err("Market already exists")));
+    }
 
-//     let worker = Worker {
-//         contract_addr: deps.api.addr_canonicalize(contract_addr.as_str())?,
-//         asset_infos: raw_infos
-//     };
+    let market = Market {
+        contract_addr: deps.api.addr_canonicalize(contract_addr.as_str())?, 
+    };
 
-//     WORKERS.save(deps.storage, pair_key, &worker)?;
-//     Ok(Response {
-//         messages: vec![],
-//         attributes: vec![
-//             attr("worker_addr", contract_addr.to_string())
-//         ],
-//         events: vec![],
-//         data: None
-//     })
-// }
+    MARKETS.save(deps.storage, key, &market)?;
+
+    Ok(Response::default())
+}
 
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {

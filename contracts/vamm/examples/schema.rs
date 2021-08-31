@@ -3,11 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use terraswap::asset::PairInfo;
-use terraswap::pair::{
-    Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PoolResponse, QueryMsg,
-    ReverseSimulationResponse, SimulationResponse,
-};
+use seesaw::bank::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
@@ -17,11 +13,6 @@ fn main() {
 
     export_schema(&schema_for!(InstantiateMsg), &out_dir);
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
-    export_schema(&schema_for!(MigrateMsg), &out_dir);
-    export_schema(&schema_for!(Cw20HookMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
-    export_schema(&schema_for!(PairInfo), &out_dir);
-    export_schema(&schema_for!(PoolResponse), &out_dir);
-    export_schema(&schema_for!(ReverseSimulationResponse), &out_dir);
-    export_schema(&schema_for!(SimulationResponse), &out_dir);
+    export_schema(&schema_for!(ConfigResponse), &out_dir);
 }

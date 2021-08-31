@@ -32,8 +32,6 @@ pub struct Position {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Market {
     pub contract_addr: CanonicalAddr,
-    pub asset_infos: [AssetInfoRaw; 2],
-    pub next_position_id: u64
 }
 
 pub fn read_markets(
