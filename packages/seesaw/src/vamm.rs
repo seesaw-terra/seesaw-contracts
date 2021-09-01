@@ -47,6 +47,12 @@ pub struct StateResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StateResponse {
+    pub base_asset_reserve: Uint256,
+    pub quote_asset_reserve: Uint256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MarketsResponse {
     pub markets: Vec<MarketItem>
 }

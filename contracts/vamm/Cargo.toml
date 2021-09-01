@@ -46,8 +46,8 @@ protobuf = { version = "2", features = ["with-bytes"] }
 cosmwasm-bignumber = "2.2.0"
 terraswap = { path = "../../packages/terraswap", default-features = false, version = "2.4.1"}
 seesaw = { path = "../../packages/seesaw", version = "0.1.0"}
+terra-cosmwasm = { version = "2.2.0" }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
-terra-cosmwasm = { version = "2.2.0" }
 cosmwasm-storage = { version = "0.16.0" }

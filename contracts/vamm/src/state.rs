@@ -8,10 +8,17 @@ use cw_storage_plus::{Item,Map};
 use seesaw::bank::{MarketItem, Direction};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum OracleType {
+    NATIVE // Right now only native oracle implemented, will add Band and Mirror oracles in future.
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub contract_addr: CanonicalAddr,
     pub bank_addr: CanonicalAddr,
-    pub stable_denom: String
+    pub stable_denom: String,
+    pub oracle_type: OracleType,
+    pub quote_denom: String, // Optional, required if OracleType = Native
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

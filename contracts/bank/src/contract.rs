@@ -7,11 +7,12 @@ use terraswap::asset::{AssetInfo};
 use terraswap::token::InstantiateMsg as TokenInstantiateMsg;
 use cw20::{MinterResponse, Cw20ReceiveMsg};
 use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg, StateResponse};
+use seesaw::vamm::{ExecuteMsg as VammExecuteMsg};
 
 use crate::error::ContractError;
 use crate::state::{CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market, read_markets};
 use crate::response::MsgInstantiateContractResponse;
-use crate::deposit::{ add_margin };
+use crate::positions::{ add_margin };
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors

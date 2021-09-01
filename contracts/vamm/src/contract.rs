@@ -1,12 +1,11 @@
-use cosmwasm_std::{
-    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, CanonicalAddr, Reply, StdError, attr, SubMsg, WasmMsg, ReplyOn, from_binary, Addr
-};
+use cosmwasm_std::{Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Reply, ReplyOn, Response, StdError, StdResult, SubMsg, WasmMsg, attr, entry_point, from_binary, to_binary};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use seesaw::bank::Direction;
+use terra_cosmwasm::{ExchangeRatesResponse, TerraQuerier};
 use terraswap::asset::{AssetInfo};
 use cw20::{ Cw20ReceiveMsg};
 use seesaw::vamm::{ ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg, StateResponse};
-use crate::state::{CONFIG, Config, STATE, State};
+use crate::state::{CONFIG, Config, OracleType, STATE, State};
 
 use crate::{ error::ContractError };
 
@@ -24,6 +23,8 @@ pub fn instantiate(
         contract_addr: deps.api.addr_canonicalize(&env.contract.address.as_str())?,
         bank_addr: deps.api.addr_canonicalize(&msg.bank_addr.as_str())?,
         stable_denom: msg.stable_denom,
+        oracle_type: OracleType::NATIVE,
+        quote_denom: "uluna".to_string(),
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -56,6 +57,10 @@ pub fn execute(
     }
 }
 
+/* 
+    SWAP IN/OUT FUNCTIONS
+*/
+
 pub fn swap_in (
     deps: DepsMut, 
     env: Env, 
@@ -64,7 +69,7 @@ pub fn swap_in (
     direction: Direction
 ) -> Result<Response, ContractError> {
 
-    let base_amount = get_base_from_quote(&deps, quote_asset_amount, &direction)?;
+    let base_amount = get_base_from_quote(deps.as_ref(), quote_asset_amount, &direction)?;
 
     let state: State = STATE.load(deps.storage)?;
 
@@ -96,19 +101,22 @@ pub fn swap_in (
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::BaseFromQuote  { quoteAmount, direction } => to_binary(&query_config(deps)?),
-        QueryMsg::QuoteFromBase { baseAmount, direction } => to_binary(&query_config(deps)?),
+        QueryMsg::BaseFromQuote  { quoteAmount, direction } => to_binary(&get_base_from_quote(deps, quoteAmount, &direction)?),
+        QueryMsg::QuoteFromBase { baseAmount, direction } => to_binary(&get_quote_from_base(deps, baseAmount, &direction)?),
         QueryMsg::OraclePrice {} => to_binary(&query_config(deps)?),
         QueryMsg::MarketPrice {} => to_binary(&query_config(deps)?),
         QueryMsg::State {} => to_binary(&query_state(deps)?)
     }
 }
 
-pub fn get_base_from_quote(deps: &DepsMut, quoteAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
+/* 
+    AMM SIMULATION FUNCTIONS
+*/
+
+pub fn get_base_from_quote(deps: Deps, quoteAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
     return get_base_from_quote_internal(quoteAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
 }
-
 
 fn get_base_from_quote_internal( quoteAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
@@ -137,13 +145,13 @@ fn get_base_from_quote_internal( quoteAmount: Uint256, direction: &Direction, qu
 }
 
 
-pub fn get_quote_from_base(deps: DepsMut, baseAmount: Uint256, direction: Direction ) -> StdResult<Uint256> {
+pub fn get_quote_from_base(deps: Deps, baseAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
     return get_quote_from_base_internal(baseAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
 }
 
 
-fn get_quote_from_base_internal( baseAmount: Uint256, direction: Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
+fn get_quote_from_base_internal( baseAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
     
     let mut new_base_reserve = match direction {
@@ -168,6 +176,39 @@ fn get_quote_from_base_internal( baseAmount: Uint256, direction: Direction, quot
 
     Ok(quote_reserve_delta)
 }
+
+
+/* 
+    ORACLE FUNCTIONS
+*/
+
+// Get the price of underlying asset
+pub fn get_underlying_price(deps: Deps) -> StdResult<Decimal256> {
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    match config.oracle_type {
+        OracleType::NATIVE => {
+            return query_native_rate(&deps.querier, config.stable_denom, config.quote_denom);
+        }
+    }
+}
+
+fn query_native_rate(
+    querier: &QuerierWrapper,
+    base_denom: String,
+    quote_denom: String,
+) -> StdResult<Decimal256> {
+    let terra_querier = TerraQuerier::new(querier);
+    let res: ExchangeRatesResponse =
+        terra_querier.query_exchange_rates(base_denom, vec![quote_denom])?;
+
+    Ok(Decimal256::from(res.exchange_rates[0].exchange_rate))
+}
+
+
+/* 
+    QUERY FUNCTIONS
+*/
 
 fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = CONFIG.load(deps.storage)?;
