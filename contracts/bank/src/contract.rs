@@ -10,7 +10,7 @@ use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, 
 use seesaw::vamm::{ExecuteMsg as VammExecuteMsg};
 
 use crate::error::ContractError;
-use crate::state::{CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market, read_markets};
+use crate::state::{ CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market, read_markets };
 use crate::response::MsgInstantiateContractResponse;
 use crate::positions::{ add_margin };
 
@@ -31,9 +31,7 @@ pub fn instantiate(
     CONFIG.save(deps.storage, &config)?;
 
     let state = State {
-        last_interest_updated: env.block.height,
-        total_liabilities: Decimal256::zero(),
-        total_debt_share: Decimal256::zero(),
+        last_cumulative_funding_fee: env.block.height
     };
 
     STATE.save(deps.storage, &state)?;
@@ -53,7 +51,11 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env,info, msg),
         ExecuteMsg::DepositStable { market_addr } => add_margin(deps, env, info, market_addr),
-        ExecuteMsg::RegisterMarket { contract_addr } => register_market(deps, env, info, contract_addr),
+        ExecuteMsg::RegisterMarket { contract_addr } => 
+            { 
+                let valid_addr: Addr = deps.api.addr_validate(&contract_addr.as_str())?;
+                register_market(deps, env, info, valid_addr)
+            },
     }
 }
 
@@ -64,7 +66,7 @@ pub fn receive_cw20(
     cw20_msg: Cw20ReceiveMsg
 ) -> Result<Response, ContractError> {
     match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::WithdrawStable { }) => {
+        Ok(Cw20HookMsg::WithdrawStable {}) => {
             let sender_addr = deps.api.addr_validate(cw20_msg.sender.as_str())?;
             let contract_addr = deps.api.addr_canonicalize(info.sender.as_str())?;
             let config = CONFIG.load(deps.storage)?;
@@ -118,8 +120,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 fn query_state(deps: Deps) -> StdResult<StateResponse> {
     let state = STATE.load(deps.storage)?;
     Ok(StateResponse {
-        last_interest_updated: state.last_interest_updated,
-        total_liabilities: state.total_liabilities,
+        last_cumulative_funding_fee: state.last_cumulative_funding_fee,
     })
 }
 
@@ -138,19 +139,3 @@ fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<Posi
         direction: position.direction
     })
 }
-
-// #[entry_point]
-// pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> Result<Response, ContractError> {
-//     let data = msg.result.unwrap().data.unwrap();
-//     let result:MsgInstantiateContractResponse = Message::parse_from_bytes(data.as_slice()).map_err(|_| {
-//         StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data")
-//     })?;
-//     let contract_addr = result.get_contract_address();
-
-//     let api = deps.api;
-//     CONFIG.update(deps.storage, |mut meta| -> StdResult<_> {
-//         meta.ib_token_addr = api.addr_canonicalize(contract_addr)?;
-//         Ok(meta)
-//     })?;
-//     Ok(Response::default())
-// }

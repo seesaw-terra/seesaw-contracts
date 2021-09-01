@@ -16,9 +16,7 @@ pub struct Config {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub last_interest_updated: u64,
-    pub total_liabilities: Decimal256,
-    pub total_debt_share: Decimal256,
+    pub last_cumulative_funding_fee: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{Addr};
+use cosmwasm_std::{Addr, Uint128};
 use cosmwasm_bignumber::{Decimal256,Uint256};
 use cw20::Cw20ReceiveMsg;
 use terraswap::asset::{AssetInfo, Asset};
@@ -10,9 +10,9 @@ use crate::bank::{ Direction };
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub stable_denom: String,
-    pub bank_addr: Addr,
-    pub init_base_reserve: Uint256,
-    pub init_quote_reserve: Uint256
+    pub bank_addr: String,
+    pub init_base_reserve: Uint128,
+    pub init_quote_reserve: Uint128
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -47,12 +47,6 @@ pub struct StateResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct StateResponse {
-    pub base_asset_reserve: Uint256,
-    pub quote_asset_reserve: Uint256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MarketsResponse {
     pub markets: Vec<MarketItem>
 }
@@ -61,8 +55,6 @@ pub struct MarketsResponse {
 pub struct BorrowRateResponse {
     pub rate: Decimal256
 }
-
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PositionResponse {

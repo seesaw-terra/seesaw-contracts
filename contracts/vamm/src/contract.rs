@@ -32,8 +32,8 @@ pub fn instantiate(
     let funding_period: u128 = 8 * 60 * 60 * 1000; // Every 8 hours
 
     let state = State {
-        base_asset_reserve: msg.init_base_reserve, // Initialize at a certain price
-        quote_asset_reserve: msg.init_quote_reserve, // Initialize at a certain price
+        base_asset_reserve: Uint256::from(msg.init_base_reserve), // Initialize at a certain price
+        quote_asset_reserve: Uint256::from(msg.init_quote_reserve), // Initialize at a certain price
         funding_period: Uint256::from(funding_period),
     };
 
@@ -69,6 +69,9 @@ pub fn swap_in (
     direction: Direction
 ) -> Result<Response, ContractError> {
 
+    // Get amount of base required to long/short from quote
+    // LONG -> how much UST required to open position
+    // SHORT -> how much UST we end up with when we open position
     let base_amount = get_base_from_quote(deps.as_ref(), quote_asset_amount, &direction)?;
 
     let state: State = STATE.load(deps.storage)?;
@@ -77,12 +80,12 @@ pub fn swap_in (
 
     match direction {
         Direction::LONG => {
-            new_state.base_asset_reserve += base_amount;
-            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount;
+            new_state.base_asset_reserve += base_amount; // Add UST to the market
+            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Take out quote asset from the market
         }
         Direction::SHORT => {
-            new_state.quote_asset_reserve += quote_asset_amount;
-            new_state.base_asset_reserve = state.base_asset_reserve - base_amount;
+            new_state.quote_asset_reserve += quote_asset_amount; // Sell quote asset to market
+            new_state.base_asset_reserve = state.base_asset_reserve - base_amount; // Get UST
         }
         Direction::NOT_SET => {
             return Err(ContractError::Std(StdError::generic_err("Invalid Direction").into()));

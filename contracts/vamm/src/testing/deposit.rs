@@ -21,12 +21,14 @@ fn swap_in() {
     ]);
 
     let info = mock_info("owner", &vec![]);
+
     let msg = InstantiateMsg {
         stable_denom: "uusd".to_string(),
-        bank_addr: Addr::unchecked("bank0000"),
+        bank_addr: "bank0000".to_string(),
         init_quote_reserve: Uint256::from(1000u128),
         init_base_reserve: Uint256::from(100000u128)
     };
+
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let info = mock_info("depositor", &vec![Coin {

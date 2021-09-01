@@ -25,7 +25,7 @@ import {
   });
   
   const key = new MnemonicKey({
-      mnemonic: 'stadium mandate label reveal farm dynamic bulk skill brand federal kidney cloud rice object ball video lake maple dragon domain lawn pole hen upset'
+      mnemonic: 'merge juice feel flee laptop track salad deliver bird replace pride nature oven creek neutral toward upgrade caution advance trend method aspect tooth region'
   })
   
   export const mainWallet = terra.wallet(key)

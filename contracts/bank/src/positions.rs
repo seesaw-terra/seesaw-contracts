@@ -6,7 +6,7 @@ use cw20::{Cw20ExecuteMsg};
 use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg };
 
 use crate::error::ContractError;
-use crate::state::{ CONFIG, Config, STATE, State, POSITIONS, Position };
+use crate::state::{ CONFIG, Config, STATE, State, POSITIONS, Position, MARKETS, Market };
 
 use seesaw::bank::{ Direction };
 
@@ -17,6 +17,9 @@ pub fn add_margin(
     info: MessageInfo,
     market_addr: Addr
 ) -> Result<Response, ContractError> {
+
+    // Crash if market doesn't exist
+    let market = MARKETS.load(deps.storage, market_addr.as_bytes());
 
     //  1. Load Config
     let config:Config = CONFIG.load(deps.storage)?;
@@ -34,7 +37,6 @@ pub fn add_margin(
     }
 
     //  3. Load previous position, if new user, create new position
-
     let positions_res  = POSITIONS.may_load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 
     match positions_res {
@@ -75,6 +77,9 @@ pub fn open_position(
     direction: Direction,
     positionSize: Uint256 // amount of assets to hold position on
 ) -> Result<Response, ContractError> {
+
+    // Crash if market doesn't exist
+    let market = MARKETS.load(deps.storage, market_addr.as_bytes());
 
     let position = POSITIONS.load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 

@@ -15,9 +15,7 @@ pub enum Direction {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub stable_denom: String,
-    pub token_code_id: u64,
-    pub interest_multipiler: Decimal256
+    pub stable_denom: String
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -25,10 +23,10 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     DepositStable {
-        market_addr: Addr
+        market_addr: String
     },
     RegisterMarket { // Register vAMM
-        contract_addr: Addr
+        contract_addr: String
     }
 }
 
@@ -60,8 +58,7 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
-    pub last_interest_updated: u64,
-    pub total_liabilities: Decimal256,
+    pub last_cumulative_funding_fee: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
