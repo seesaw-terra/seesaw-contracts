@@ -21,8 +21,8 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra1nscs5wwdtw4s07f8lkjjme6m5r9p2vlc95v4ug';
-let vammAddr: string = 'terra1qzjldp6h4543swndfpj00e4s5wg6xq55x0kd3a';
+let bankAddr: string = 'terra1wd02pjkgt8v7yxj6pryja4qzgmuz3fyfz9mlwk';
+let vammAddr: string = 'terra1xp2366g3nkwn37yeruvt40mjdrktz7uvrwfd3n';
 
 
 //----------------------------------------------------------------------------------------
@@ -34,8 +34,8 @@ async function testAddMargin() {
   const res = await execute(mainWallet, bankAddr, {
     deposit_stable: {
       market_addr: vammAddr
-    }, coins: '1000uusd'
-  })
+    }},'10uusd'
+  )
 
   const poolUUsd = await queryNativeTokenBalance(terra, bankAddr, "uusd");
   console.log(poolUUsd)
