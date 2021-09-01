@@ -12,7 +12,7 @@ use seesaw::vamm::{ExecuteMsg as VammExecuteMsg};
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market, read_markets };
 use crate::response::MsgInstantiateContractResponse;
-use crate::positions::{ add_margin };
+use crate::positions::{add_margin, close_position, open_position};
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -58,6 +58,16 @@ pub fn execute(
             let valid_addr: Addr = deps.api.addr_validate(&contract_addr.as_str())?;
             register_market(deps, env, info, valid_addr)
         },
+        ExecuteMsg::OpenPosition { market_addr, open_value, direction  } => 
+        {
+            let valid_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;
+            open_position(deps, env, info, valid_addr, direction, open_value)
+        }
+        ExecuteMsg::ClosePosition { market_addr } =>
+        {
+            let valid_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;
+            close_position(deps, env, info, valid_addr)
+        }
     }
 }
 

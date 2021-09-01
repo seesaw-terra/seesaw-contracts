@@ -2,8 +2,8 @@ use cosmwasm_std::{Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut, Env, Mes
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use seesaw::bank::Direction;
 use terra_cosmwasm::{ExchangeRatesResponse, TerraQuerier};
-use terraswap::asset::{AssetInfo};
-use cw20::{ Cw20ReceiveMsg};
+use terraswap::asset::{ AssetInfo };
+use cw20::{ Cw20ReceiveMsg };
 use seesaw::vamm::{ ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg, StateResponse};
 use crate::state::{CONFIG, Config, OracleType, STATE, State};
 
@@ -24,7 +24,7 @@ pub fn instantiate(
         bank_addr: deps.api.addr_canonicalize(&msg.bank_addr.as_str())?,
         stable_denom: msg.stable_denom,
         oracle_type: OracleType::NATIVE,
-        quote_denom: "uluna".to_string(),
+        base_denom: "uluna".to_string(),
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -53,7 +53,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::SwapIn { quote_asset_amount, direction } => swap_in(deps, env, info, quote_asset_amount, direction),
-        ExecuteMsg::SwapOut { quote_asset_amount, direction } => swap_in(deps, env, info, quote_asset_amount, direction),
+        ExecuteMsg::SwapOut { base_asset_amount, direction } => swap_out(deps, env, info, base_asset_amount, direction),
     }
 }
 
@@ -69,10 +69,10 @@ pub fn swap_in (
     direction: Direction
 ) -> Result<Response, ContractError> {
 
-    // Get amount of base required to long/short from quote
-    // LONG -> how much UST required to open position
-    // SHORT -> how much UST we end up with when we open position
-    let base_amount = get_base_from_quote(deps.as_ref(), quote_asset_amount, &direction)?;
+    // Get amount of base we will be long/short 
+    // LONG -> how much base asset returned when we open position
+    // SHORT -> how much base asset we borrow when we open position
+    let base_amount = simulate_swapin(deps.as_ref(), quote_asset_amount, &direction)?;
 
     let state: State = STATE.load(deps.storage)?;
 
@@ -80,12 +80,12 @@ pub fn swap_in (
 
     match direction {
         Direction::LONG => {
-            new_state.base_asset_reserve += base_amount; // Add UST to the market
-            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Take out quote asset from the market
+            new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
+            new_state.base_asset_reserve = state.base_asset_reserve - base_amount; // Take out base asset bought
         }
         Direction::SHORT => {
-            new_state.quote_asset_reserve += quote_asset_amount; // Sell quote asset to market
-            new_state.base_asset_reserve = state.base_asset_reserve - base_amount; // Get UST
+            new_state.base_asset_reserve += base_amount; // Sell borrowed base assets to market
+            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Take out UST from market
         }
         Direction::NOT_SET => {
             return Err(ContractError::Std(StdError::generic_err("Invalid Direction").into()));
@@ -101,11 +101,52 @@ pub fn swap_in (
 
 }
 
+pub fn swap_out (
+    deps: DepsMut, 
+    env: Env, 
+    info: MessageInfo, 
+    base_asset_amount: Uint256, 
+    direction: Direction
+) -> Result<Response, ContractError> {
+
+    // Get amount of base we will be long/short 
+    // LONG -> how much base asset returned when we open position
+    // SHORT -> how much base asset we borrow when we open position
+    let quote_asset_amount = simulate_swapout(deps.as_ref(), base_asset_amount, &direction)?;
+
+    let state: State = STATE.load(deps.storage)?;
+
+    let mut new_state = state.clone();
+
+    match direction {
+        Direction::LONG => {
+            new_state.base_asset_reserve += base_asset_amount; // Sell base assets to market
+            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Get UST back
+        }
+        Direction::SHORT => {
+            new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
+            new_state.base_asset_reserve = state.base_asset_reserve - base_asset_amount; // Buy base assets to return
+        }
+        Direction::NOT_SET => {
+            return Err(ContractError::Std(StdError::generic_err("Invalid Direction").into()));
+        }
+    }
+
+    STATE.save(deps.storage, &new_state)?;
+
+    Ok(Response::new().add_attributes(vec![
+        ("action", "swap")
+    ])
+    )
+
+}
+
+
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::BaseFromQuote  { quoteAmount, direction } => to_binary(&get_base_from_quote(deps, quoteAmount, &direction)?),
-        QueryMsg::QuoteFromBase { baseAmount, direction } => to_binary(&get_quote_from_base(deps, baseAmount, &direction)?),
+        QueryMsg::SimulateIn  { quoteAmount, direction } => to_binary(&simulate_swapin(deps, quoteAmount, &direction)?),
+        QueryMsg::SimulateOut { baseAmount, direction } => to_binary(&simulate_swapout(deps, baseAmount, &direction)?),
         QueryMsg::OraclePrice {} => to_binary(&query_config(deps)?),
         QueryMsg::MarketPrice {} => to_binary(&query_config(deps)?),
         QueryMsg::State {} => to_binary(&query_state(deps)?)
@@ -116,20 +157,20 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     AMM SIMULATION FUNCTIONS
 */
 
-pub fn get_base_from_quote(deps: Deps, quoteAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
+pub fn simulate_swapin(deps: Deps, quoteAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
-    return get_base_from_quote_internal(quoteAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
+    return simulate_swapin_internal(quoteAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
 }
 
-fn get_base_from_quote_internal( quoteAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
+fn simulate_swapin_internal( quoteAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
     
     let mut new_quote_reserve = match direction {
         Direction::LONG => {
-            quote_reserve_amounts - quoteAmount
+            quote_reserve_amounts + quoteAmount
         }
         Direction::SHORT => {
-            quote_reserve_amounts + quoteAmount
+            quote_reserve_amounts - quoteAmount
         }
         Direction::NOT_SET => {
             return Err(StdError::generic_err("Invalid Direction").into());
@@ -148,21 +189,21 @@ fn get_base_from_quote_internal( quoteAmount: Uint256, direction: &Direction, qu
 }
 
 
-pub fn get_quote_from_base(deps: Deps, baseAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
+pub fn simulate_swapout(deps: Deps, baseAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
-    return get_quote_from_base_internal(baseAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
+    return simulate_swapout_internal(baseAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
 }
 
 
-fn get_quote_from_base_internal( baseAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
+fn simulate_swapout_internal( baseAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
     
     let mut new_base_reserve = match direction {
         Direction::LONG => {
-            base_reserve_amounts - baseAmount // Longs will close position by trading in quote assets, and getting back base assets
+            base_reserve_amounts + baseAmount // Longs will close position by trading in base assets, and getting back quote assets
         }
         Direction::SHORT => {
-            base_reserve_amounts + baseAmount // Shorts will close position by trading in base assets, and getting back quote assets
+            base_reserve_amounts - baseAmount // Shorts will close position by trading in quote assets, and getting back base assets
         }
         Direction::NOT_SET => {
             return Err(StdError::generic_err("Invalid Direction").into());
@@ -191,7 +232,7 @@ pub fn get_underlying_price(deps: Deps) -> StdResult<Decimal256> {
 
     match config.oracle_type {
         OracleType::NATIVE => {
-            return query_native_rate(&deps.querier, config.stable_denom, config.quote_denom);
+            return query_native_rate(&deps.querier, config.base_denom, config.stable_denom);
         }
     }
 }
@@ -203,7 +244,7 @@ fn query_native_rate(
 ) -> StdResult<Decimal256> {
     let terra_querier = TerraQuerier::new(querier);
     let res: ExchangeRatesResponse =
-        terra_querier.query_exchange_rates(base_denom, vec![quote_denom])?;
+        terra_querier.query_exchange_rates(quote_denom, vec![base_denom])?;
 
     Ok(Decimal256::from(res.exchange_rates[0].exchange_rate))
 }

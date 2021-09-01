@@ -16,9 +16,9 @@ pub enum OracleType {
 pub struct Config {
     pub contract_addr: CanonicalAddr,
     pub bank_addr: CanonicalAddr,
-    pub stable_denom: String,
+    pub stable_denom: String, // i.e. Quote denom
     pub oracle_type: OracleType,
-    pub quote_denom: String, // Optional, required if OracleType = Native
+    pub base_denom: String, // Optional, required if OracleType = Native
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

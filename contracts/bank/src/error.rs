@@ -15,4 +15,7 @@ pub enum ContractError {
     
     #[error("Position still open")]
     PositionAlreadyOpen {},
+
+    #[error("Position still open")]
+    PositionNotOpen {},
 }

@@ -19,15 +19,15 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     SwapIn { direction: Direction, quote_asset_amount: Uint256 }, // Used to open positions
-    SwapOut { direction: Direction, quote_asset_amount: Uint256 } // Used to close position
+    SwapOut { direction: Direction, base_asset_amount: Uint256 } // Used to close position
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     // GetCount returns the current count as a json-encoded number
-    BaseFromQuote { quoteAmount: Uint256, direction: Direction }, // base price from quote price
-    QuoteFromBase { baseAmount: Uint256, direction: Direction }, // Base amount to Long quote amount
+    SimulateIn { quoteAmount: Uint256, direction: Direction }, // base price from quote price
+    SimulateOut { baseAmount: Uint256, direction: Direction }, // Base amount to Long quote amount
     OraclePrice {},
     MarketPrice {}, // Price of assets in market
     State {}

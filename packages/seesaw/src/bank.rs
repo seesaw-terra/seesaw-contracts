@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{Addr};
+use cosmwasm_std::{Addr, Uint128};
 use cosmwasm_bignumber::{Decimal256,Uint256};
 use cw20::Cw20ReceiveMsg;
 use terraswap::asset::{AssetInfo, Asset};
@@ -27,6 +27,14 @@ pub enum ExecuteMsg {
     },
     RegisterMarket { // Register vAMM
         contract_addr: String
+    },
+    OpenPosition {
+        market_addr: String,
+        open_value: Uint256,
+        direction: Direction
+    },
+    ClosePosition {
+        market_addr: String
     }
 }
 
