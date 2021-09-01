@@ -50,12 +50,14 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env,info, msg),
-        ExecuteMsg::DepositStable { market_addr } => add_margin(deps, env, info, market_addr),
-        ExecuteMsg::RegisterMarket { contract_addr } => 
-            { 
-                let valid_addr: Addr = deps.api.addr_validate(&contract_addr.as_str())?;
-                register_market(deps, env, info, valid_addr)
-            },
+        ExecuteMsg::DepositStable { market_addr } => {
+            let valid_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;
+            add_margin(deps, env, info, valid_addr) 
+        },
+        ExecuteMsg::RegisterMarket { contract_addr } => { 
+            let valid_addr: Addr = deps.api.addr_validate(&contract_addr.as_str())?;
+            register_market(deps, env, info, valid_addr)
+        },
     }
 }
 
