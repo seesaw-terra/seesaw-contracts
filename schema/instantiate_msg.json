@@ -3,17 +3,11 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "stable_denom",
-    "token_code_id"
+    "stable_denom"
   ],
   "properties": {
     "stable_denom": {
       "type": "string"
-    },
-    "token_code_id": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     }
   }
 }

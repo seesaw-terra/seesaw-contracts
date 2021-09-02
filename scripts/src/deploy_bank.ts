@@ -7,7 +7,6 @@ import { mainWallet, init, upload, execute } from './utils';
     const bank_addr = await init(mainWallet, bank_codeId, { 
         stable_denom: 'uusd'
     }, true)
-    console.log("Initialized Bank: " + bank_addr)
 
     console.log(typeof(bank_addr));
 
@@ -17,11 +16,9 @@ import { mainWallet, init, upload, execute } from './utils';
     const vamm_addr = await init(mainWallet, vamm_codeId, { 
         stable_denom: 'uusd',
         bank_addr: bank_addr,
-        init_base_reserve: '1000000',
-        init_quote_reserve: '1000'
+        init_base_reserve: '1000000000',
+        init_quote_reserve: '1000000000000'
     }, true)
-
-    console.log("Initialized Vamm: " + vamm_addr)
 
     const res = await execute(mainWallet, bank_addr, {
         register_market: {
@@ -29,7 +26,8 @@ import { mainWallet, init, upload, execute } from './utils';
         }
     })
 
-    console.log(res)
+    console.log("Initialized Bank: " + bank_addr)
+    console.log("Initialized Vamm: " + vamm_addr)
 
 })()
 

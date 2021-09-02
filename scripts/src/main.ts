@@ -12,7 +12,7 @@ import {
   queryNativeTokenBalance,
   queryTokenBalance,
 } from "./helpers";
-import { mainWallet, init, upload, execute, terra} from './utils';
+import { mainWallet, init, upload, execute, terra, query} from './utils';
 
 chai.use(chaiAsPromised);
 const { expect } = chai;
@@ -21,9 +21,9 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra1wd02pjkgt8v7yxj6pryja4qzgmuz3fyfz9mlwk';
-let vammAddr: string = 'terra1xp2366g3nkwn37yeruvt40mjdrktz7uvrwfd3n';
-
+let bankAddr: string = 'terra1td75zw457pde4srq2252letlcph4qedpaggasd';
+let vammAddr: string = 'terra1d09n5tjkl6wj6jz6ty0xeftcsmu8mptgg54z6e';
+let walletAddr: string = 'terra1gfu9uymnr04amjtssfamzymuwna303awyz9kch';
 
 //----------------------------------------------------------------------------------------
 // Setup
@@ -34,16 +34,79 @@ async function testAddMargin() {
   const res = await execute(mainWallet, bankAddr, {
     deposit_stable: {
       market_addr: vammAddr
-    }},'10uusd'
+    }},'100000uusd'
   )
 
   const poolUUsd = await queryNativeTokenBalance(terra, bankAddr, "uusd");
-  console.log(poolUUsd)
+
+  const position_res = await query(bankAddr, {
+    position: {
+      market_addr: vammAddr,
+      user_addr: walletAddr
+    }
+    }
+  )
+  console.log(position_res)
   
   console.log(chalk.green("Passed!"));
 }
 
-testAddMargin()
+async function testOpenPosition() {
+  const open_res = await execute(mainWallet, bankAddr, {
+    open_position: {
+      market_addr: vammAddr,
+      open_value: "2000000",
+      direction: "l_o_n_g"
+    }}
+  )
+  console.log(open_res)
+
+  const position_res = await query(bankAddr, {
+    position: {
+      market_addr: vammAddr,
+      user_addr: walletAddr
+    }
+    }
+  )
+  console.log(position_res)
+
+}
+
+async function testClosePosition() {
+  const open_res = await execute(mainWallet, bankAddr, {
+    close_position: {
+      market_addr: vammAddr
+    }}
+  )
+  console.log(open_res)
+
+  const position_res = await query(bankAddr, {
+    position: {
+      market_addr: vammAddr,
+      user_addr: walletAddr
+    }
+    }
+  )
+  console.log(position_res)
+
+}
+
+
+async function queryState() {
+
+  const state_res = await query(vammAddr, {
+    state: {}
+    }
+  )
+  console.log(state_res)
+
+}
+
+// testAddMargin()
+// testOpenPosition()
+// queryState()
+
+testClosePosition();
 
 //----------------------------------------------------------------------------------------
 // Test 2. Swap

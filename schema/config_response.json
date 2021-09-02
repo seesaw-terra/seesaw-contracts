@@ -4,15 +4,11 @@
   "type": "object",
   "required": [
     "contract_addr",
-    "ib_token_addr",
     "owner_addr",
     "stable_denom"
   ],
   "properties": {
     "contract_addr": {
-      "$ref": "#/definitions/Addr"
-    },
-    "ib_token_addr": {
       "$ref": "#/definitions/Addr"
     },
     "owner_addr": {
