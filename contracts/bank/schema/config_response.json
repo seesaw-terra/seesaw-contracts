@@ -3,15 +3,19 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
-    "bank_addr",
     "contract_addr",
+    "ib_token_addr",
+    "owner_addr",
     "stable_denom"
   ],
   "properties": {
-    "bank_addr": {
+    "contract_addr": {
       "$ref": "#/definitions/Addr"
     },
-    "contract_addr": {
+    "ib_token_addr": {
+      "$ref": "#/definitions/Addr"
+    },
+    "owner_addr": {
       "$ref": "#/definitions/Addr"
     },
     "stable_denom": {

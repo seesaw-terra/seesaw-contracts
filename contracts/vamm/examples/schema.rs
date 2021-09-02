@@ -3,10 +3,12 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use seesaw::bank::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse};
+use seesaw::vamm::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
+    out_dir.push("contracts");
+    out_dir.push("vamm");
     out_dir.push("schema");
     create_dir_all(&out_dir).unwrap();
     remove_schemas(&out_dir).unwrap();

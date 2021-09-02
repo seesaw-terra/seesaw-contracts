@@ -5,14 +5,75 @@
     {
       "type": "object",
       "required": [
-        "deposit_stable"
+        "swap_in"
       ],
       "properties": {
-        "deposit_stable": {
+        "swap_in": {
+          "type": "object",
+          "required": [
+            "direction",
+            "quote_asset_amount"
+          ],
+          "properties": {
+            "direction": {
+              "$ref": "#/definitions/Direction"
+            },
+            "quote_asset_amount": {
+              "$ref": "#/definitions/Uint256"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "swap_out"
+      ],
+      "properties": {
+        "swap_out": {
+          "type": "object",
+          "required": [
+            "base_asset_amount",
+            "direction"
+          ],
+          "properties": {
+            "base_asset_amount": {
+              "$ref": "#/definitions/Uint256"
+            },
+            "direction": {
+              "$ref": "#/definitions/Direction"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "settle_funding"
+      ],
+      "properties": {
+        "settle_funding": {
           "type": "object"
         }
       },
       "additionalProperties": false
     }
-  ]
+  ],
+  "definitions": {
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "n_o_t__s_e_t",
+        "s_h_o_r_t",
+        "l_o_n_g"
+      ]
+    },
+    "Uint256": {
+      "type": "string"
+    }
+  }
 }

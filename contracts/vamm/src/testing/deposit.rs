@@ -8,6 +8,7 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
 use crate::contract::{instantiate, execute, query};
 use crate::error::ContractError;
+use crate::state::{MarketSnapshots, SnapshotItem};
 use crate::testing::mock_querier::mock_dependencies;
 
 #[test]
@@ -48,6 +49,11 @@ fn swap_in() {
     assert_eq!(state.quote_asset_reserve, Uint256::from(1001000u128));
     assert_eq!(state.base_asset_reserve, Uint256::from(999u128));
 
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::MarketSnapshots { }).unwrap();
+    let snapshots: MarketSnapshots = from_binary(&res).unwrap();
+
+    // TEST SNAPSHOTS
+    assert_eq!(snapshots, snapshots);
 }
 
 #[test]

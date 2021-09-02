@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecuteMsg",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "deposit_stable"
+      ],
+      "properties": {
+        "deposit_stable": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

@@ -1,16 +1,12 @@
-use crate::state::{CONFIG, Config, OracleType, STATE, State};
+use std::collections::VecDeque;
+use std::time;
+
+use crate::state::{CONFIG, Config, OracleType, STATE, State, SNAPSHOTS, MarketSnapshots, SnapshotItem};
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut,
-    Env, MessageInfo, QuerierWrapper, Reply, ReplyOn, Response, StdError, StdResult, SubMsg,
-    WasmMsg,
-};
+use cosmwasm_std::{Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Reply, ReplyOn, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg, attr, entry_point, from_binary, to_binary};
 use cw20::Cw20ReceiveMsg;
 use seesaw::bank::Direction;
-use seesaw::vamm::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg,
-    StateResponse, Funding, WhoPays
-};
+use seesaw::vamm::{ConfigResponse, ExecuteMsg, Funding, InstantiateMsg, MarketItem, MarketsResponse, PositionResponse, QueryMsg, StateResponse, WhoPays};
 use terra_cosmwasm::{ExchangeRatesResponse, TerraQuerier};
 use terraswap::asset::AssetInfo;
 
@@ -40,7 +36,7 @@ pub fn instantiate(
     let state = State {
         base_asset_reserve: Uint256::from(msg.init_base_reserve), // Initialize at a certain price
         quote_asset_reserve: Uint256::from(msg.init_quote_reserve), // Initialize at a certain price
-        funding_period: Uint256::from(funding_period),
+        funding_period: Uint256::from(funding_period), // Funding period in Nanoseconds
         aggregated_funding: Decimal256::from_uint256(Uint256::from(1_000_000_000u128)),
         funding_rate: Funding {
             amount: Decimal256::zero(),
@@ -50,8 +46,53 @@ pub fn instantiate(
 
     STATE.save(deps.storage, &state)?;
 
+    let new_market_snapshots: MarketSnapshots = MarketSnapshots {
+        snapshots: vec! [
+            SnapshotItem {
+                base_asset_reserve: Uint256::from(msg.init_base_reserve), 
+                quote_asset_reserve: Uint256::from(msg.init_quote_reserve),
+                base_delta: 0i64,
+                timestamp: env.block.time.nanos()
+            }
+        ]
+    };
+
+    SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
+    
+
     Ok(Response::new().add_attributes(vec![("action", "instantiate")]))
 }
+
+fn  create_snapshots(
+    deps: Deps,
+    env: &Env,
+    base_asset_reserve: Uint256,
+    quote_asset_reserve: Uint256, // Initialize at a certain price
+    base_delta: i64,
+) -> StdResult<MarketSnapshots> {
+    let market_snapshots: MarketSnapshots = SNAPSHOTS.load(deps.storage)?;
+
+    let snapshot_items: Vec<SnapshotItem> = market_snapshots.snapshots;
+    let mut snapshot_deque = VecDeque::from(snapshot_items);
+
+    snapshot_deque.push_back(
+        SnapshotItem {
+            base_asset_reserve: base_asset_reserve, // Initialize at a certain price
+            quote_asset_reserve: quote_asset_reserve, // Initialize at a certain price
+            base_delta: base_delta,
+            timestamp: env.block.time.nanos()
+        }
+    );
+
+    let new_market_snapshots: MarketSnapshots = MarketSnapshots {
+        snapshots: Vec::from(snapshot_deque)
+    };
+    
+    Ok(new_market_snapshots)
+}
+
+
+
 
 // And declare a custom Error variant for the ones where you will want to make use of it
 #[entry_point]
@@ -159,12 +200,22 @@ pub fn swap_in(
         Direction::LONG => {
             new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
             new_state.base_asset_reserve = state.base_asset_reserve - base_amount;
-            // Take out base asset bought
+
+            let delta : i64 = u128::from(Uint128::from(base_amount)) as i64;
+
+            let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
+            SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
         }
         Direction::SHORT => {
             new_state.base_asset_reserve += base_amount; // Sell borrowed base assets to market
             new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount;
             // Take out UST from market
+
+            let mut delta : i64 = u128::from(Uint128::from(base_amount)) as i64;
+            delta = -delta; // Negative delta if short
+
+            let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
+            SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
         }
         Direction::NOT_SET => {
             return Err(ContractError::Std(
@@ -199,11 +250,25 @@ pub fn swap_out(
             new_state.base_asset_reserve += base_asset_amount; // Sell base assets to market
             new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount;
             // Get UST back
+
+            let mut delta : i64 = u128::from(Uint128::from(base_asset_amount)) as i64;
+            delta = -delta; // Negative delta on closing if long
+
+            let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
+            SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
+
         }
         Direction::SHORT => {
             new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
             new_state.base_asset_reserve = state.base_asset_reserve - base_asset_amount;
             // Buy base assets to return
+
+            let mut delta : i64 = u128::from(Uint128::from(base_asset_amount)) as i64;
+            delta = -delta; // Positive delta on closing if short
+
+            let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
+            SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
+
         }
         Direction::NOT_SET => {
             return Err(ContractError::Std(
@@ -231,7 +296,20 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::OraclePrice {} => to_binary(&query_config(deps)?),
         QueryMsg::MarketPrice {} => to_binary(&query_config(deps)?),
         QueryMsg::State {} => to_binary(&query_state(deps)?),
+        QueryMsg::MarketInfo {} => to_binary(&query_state(deps)?),
+        QueryMsg::MarketSnapshots {} => to_binary(&get_market_snapshots(deps)?),
     }
+}
+
+/*
+    ORACLE FUNCTIONS
+*/
+
+// Get the price of underlying asset
+pub fn get_market_snapshots(deps: Deps) -> StdResult<MarketSnapshots> {
+    let market_snapshots = SNAPSHOTS.load(deps.storage)?;
+
+    return Ok(market_snapshots);
 }
 
 /*

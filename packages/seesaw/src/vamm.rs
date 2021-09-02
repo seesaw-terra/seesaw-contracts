@@ -8,6 +8,7 @@ use terraswap::asset::{AssetInfo, Asset};
 use crate::bank::{ Direction };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct InstantiateMsg {
     pub stable_denom: String,
     pub bank_addr: String,
@@ -31,10 +32,13 @@ pub enum QueryMsg {
     SimulateOut { baseAmount: Uint256, direction: Direction }, // Base amount to Long quote amount
     OraclePrice {},
     MarketPrice {}, // Price of assets in market
-    State {}
+    State {},
+    MarketInfo {},
+    MarketSnapshots {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct ConfigResponse {
     pub contract_addr: Addr,
     pub bank_addr: Addr,
@@ -42,18 +46,21 @@ pub struct ConfigResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum WhoPays {
     LONG,
     SHORT
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct Funding {
     pub amount: Decimal256,
     pub who_pays: WhoPays
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct StateResponse {
     pub base_asset_reserve: Uint256,
     pub quote_asset_reserve: Uint256,
@@ -62,16 +69,19 @@ pub struct StateResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct MarketsResponse {
     pub markets: Vec<MarketItem>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct BorrowRateResponse {
     pub rate: Decimal256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct PositionResponse {
     pub margin: Uint256,
     pub openingValue: Uint256,
@@ -80,6 +90,7 @@ pub struct PositionResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct MarketItem {
     pub contract_addr: Addr
 }

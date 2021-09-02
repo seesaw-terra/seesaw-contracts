@@ -5,10 +5,70 @@
     {
       "type": "object",
       "required": [
-        "config"
+        "simulate_in"
       ],
       "properties": {
-        "config": {
+        "simulate_in": {
+          "type": "object",
+          "required": [
+            "direction",
+            "quoteAmount"
+          ],
+          "properties": {
+            "direction": {
+              "$ref": "#/definitions/Direction"
+            },
+            "quoteAmount": {
+              "$ref": "#/definitions/Uint256"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "simulate_out"
+      ],
+      "properties": {
+        "simulate_out": {
+          "type": "object",
+          "required": [
+            "baseAmount",
+            "direction"
+          ],
+          "properties": {
+            "baseAmount": {
+              "$ref": "#/definitions/Uint256"
+            },
+            "direction": {
+              "$ref": "#/definitions/Direction"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "oracle_price"
+      ],
+      "properties": {
+        "oracle_price": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "market_price"
+      ],
+      "properties": {
+        "market_price": {
           "type": "object"
         }
       },
@@ -25,6 +85,43 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "market_info"
+      ],
+      "properties": {
+        "market_info": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "market_snapshots"
+      ],
+      "properties": {
+        "market_snapshots": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
     }
-  ]
+  ],
+  "definitions": {
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "n_o_t__s_e_t",
+        "s_h_o_r_t",
+        "l_o_n_g"
+      ]
+    },
+    "Uint256": {
+      "type": "string"
+    }
+  }
 }
