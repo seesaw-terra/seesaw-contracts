@@ -4,13 +4,13 @@ use protobuf::Message;
 use terraswap::asset::{AssetInfo};
 use terraswap::token::InstantiateMsg as TokenInstantiateMsg;
 use cw20::{MinterResponse, Cw20ReceiveMsg};
-use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MarketResponse, PositionResponse, QueryMsg, StateResponse};
+use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, Direction, ExecuteMsg, InstantiateMsg, MarketResponse, PositionResponse, QueryMsg, StateResponse};
 use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg, StateResponse as VammStateResponse};
 
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market };
 use crate::response::MsgInstantiateContractResponse;
-use crate::positions::{add_margin, close_position, open_position};
+use crate::positions::{add_margin, close_position, open_position, simulate_close};
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -216,10 +216,33 @@ fn query_markets(deps: Deps, market_addr: Addr) -> StdResult<MarketResponse> {
 
 fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<PositionResponse> {
     let position = POSITIONS.load(deps.storage, (&amm_addr.as_bytes(), user_addr.as_bytes()))?;
+
+    if position.direction == Direction::NOT_SET {
+        return Ok(PositionResponse {
+            margin: position.margin,
+            margin_left: position.margin,
+            openingValue: position.openingValue,
+            positionSize: position.positionSize,
+            direction: position.direction,
+            current_value: position.openingValue,
+            margin_ratio: Decimal256::from_uint256(1u128),
+            pnl: 0i64
+        });
+    }
+
+    let (pnl, new_position_value, margin_adjusted) = simulate_close(deps, amm_addr, position.clone())?;
+
+    let margin_ratio: Decimal256 = Decimal256::from_ratio(margin_adjusted, position.openingValue);
+
     Ok(PositionResponse {
         margin: position.margin,
+        margin_left: margin_adjusted,
         openingValue: position.openingValue,
         positionSize: position.positionSize,
-        direction: position.direction
+        direction: position.direction,
+        current_value: new_position_value,
+        margin_ratio: margin_ratio,
+        pnl: pnl,
     })
 }
+

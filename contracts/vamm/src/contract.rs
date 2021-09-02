@@ -169,7 +169,7 @@ pub fn settle_funding(
     Ok(Response::default())
 }
 
-fn get_market_price(deps: Deps) -> Result<Decimal256, ContractError> {
+fn get_market_price(deps: Deps) -> StdResult<Decimal256> {
     let state: State = STATE.load(deps.storage)?;
     let mark_price: Decimal256 = Decimal256::from_uint256(state.quote_asset_reserve)
         / Decimal256::from_uint256(state.base_asset_reserve);
@@ -447,6 +447,8 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
         quote_asset_reserve: state.quote_asset_reserve,
         base_asset_reserve: state.base_asset_reserve,
         funding_premium_cumulative: state.aggregated_funding,
-        funding_fee: state.funding_rate
+        funding_fee: state.funding_rate,
+        market_price: get_market_price(deps)?,
+        underlying_price: get_underlying_price(deps)?
     })
 }

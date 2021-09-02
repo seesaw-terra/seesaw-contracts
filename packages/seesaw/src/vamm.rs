@@ -65,7 +65,9 @@ pub struct StateResponse {
     pub base_asset_reserve: Uint256,
     pub quote_asset_reserve: Uint256,
     pub funding_premium_cumulative: Decimal256,
-    pub funding_fee: Funding
+    pub funding_fee: Funding,
+    pub market_price: Decimal256,
+    pub underlying_price: Decimal256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

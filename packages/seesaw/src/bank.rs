@@ -97,7 +97,11 @@ pub struct BorrowRateResponse {
 #[serde(rename_all = "snake_case")]
 pub struct PositionResponse {
     pub margin: Uint256,
+    pub margin_left: Uint256,
     pub openingValue: Uint256,
+    pub current_value: Uint256,
+    pub margin_ratio: Decimal256,
     pub positionSize: Uint256,
-    pub direction: Direction
+    pub direction: Direction,
+    pub pnl: i64,
 }

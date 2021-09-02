@@ -139,7 +139,9 @@ impl WasmMockQuerier {
                                 funding_fee: Funding {
                                     amount: Decimal256::from_ratio(1, 1000),
                                     who_pays: WhoPays::LONG
-                                }
+                                },
+                                market_price: Decimal256::from_uint256(1100u128),
+                                underlying_price: Decimal256::from_uint256(1000u128)
                             })
                             .unwrap(),
                         ))

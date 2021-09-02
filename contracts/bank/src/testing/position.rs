@@ -158,6 +158,9 @@ fn close_position() {
 
     assert_eq!(position.openingValue, Uint256::from(500u128));
     assert_eq!(position.positionSize, Uint256::from(50u128));
+    assert_eq!(position.margin_left, Uint256::from(50u128));
+    assert_eq!(position.current_value, Uint256::from(450u128));
+    assert_eq!(position.pnl, -50i64);
 
     // 4. Close Position
 

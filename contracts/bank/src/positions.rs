@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Uint256,Decimal256};
-use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
+use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::{query_supply,query_balance};
 use cw20::{Cw20ExecuteMsg};
@@ -159,30 +159,7 @@ pub fn close_position(
 
     let config: Config = CONFIG.load(deps.storage)?;
 
-    // Get current position value
-    let new_position_value: Uint256 = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: market_addr.to_string(),
-        msg: to_binary(&VammQueryMsg::SimulateOut { baseAmount: position.positionSize.clone(), direction: position.direction.clone() })?,
-    }))?;
-
-    // 2. Calculate margin with pnl realized
-    let margin_pnl_adjusted: Uint256 = match position.direction {
-        Direction::LONG => {
-            // margin_pnl_adjusted = old_margin + (curr_value - open_value) = old_margin - open_value + curr_value
-            safe_subtract_min_zero(position.margin + new_position_value, position.openingValue)
-        },
-        Direction::SHORT => {
-            // margin_pnl_adjusted = old_margin + (open_value - curr_value) = old_margin + open_value - curr_value
-            safe_subtract_min_zero(position.margin + position.openingValue, new_position_value)
-        },
-        Direction::NOT_SET => {
-            return Err(ContractError::PositionNotOpen {});
-        },
-    };
-
-    // 3. Calculate margin with pnl and funding fee realized
-    // TO DO: find a way to implement funding fee
-    let margin_funding_adjusted: Uint256 = margin_pnl_adjusted;
+    let (_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?;
 
     /// 4. Perform Swap on vAMM
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -202,7 +179,7 @@ pub fn close_position(
         to_address: info.sender.to_string(),
         amount: vec![Coin {
             denom: config.stable_denom,
-            amount: Uint128::from(margin_funding_adjusted),
+            amount: Uint128::from(margin_adjusted),
         }],
     });
 
@@ -225,5 +202,66 @@ pub fn close_position(
         ])
     )
 }
+
+
+
+// Add Margin to a vAMM of selection
+pub fn simulate_close(
+    deps: Deps,
+    market_addr: Addr,
+    position: Position
+    // Returns PNL, New Position Size, MarginLeft
+) -> StdResult<(i64, Uint256, Uint256)> {
+
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    // Get current position value
+    let new_position_value: Uint256 = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: market_addr.to_string(),
+        msg: to_binary(&VammQueryMsg::SimulateOut { baseAmount: position.positionSize.clone(), direction: position.direction.clone() })?,
+    }))?;
+
+    // 2. Calculate margin with pnl realized
+    let margin_pnl_adjusted: Uint256 = match position.direction {
+        Direction::LONG => {
+            // margin_pnl_adjusted = old_margin + (curr_value - open_value) = old_margin - open_value + curr_value
+            safe_subtract_min_zero(position.margin + new_position_value, position.openingValue)
+        },
+        Direction::SHORT => {
+            // margin_pnl_adjusted = old_margin + (open_value - curr_value) = old_margin + open_value - curr_value
+            safe_subtract_min_zero(position.margin + position.openingValue, new_position_value)
+        },
+        Direction::NOT_SET => {
+            return Err(StdError::GenericErr { msg: "UNSET DIRECTION".to_string() });
+        },
+    };
+
+    let signed_curr_value: i64 = u128::from(new_position_value) as u64 as i64;
+    let signed_open_value: i64 = u128::from(position.openingValue) as u64 as i64;
+
+    let pnl: i64 = match position.direction {
+        Direction::LONG => {
+            signed_curr_value - signed_open_value
+        },
+        Direction::SHORT => {
+            signed_open_value - signed_curr_value
+        },
+        Direction::NOT_SET => {
+            return Err(StdError::GenericErr { msg: "UNSET DIRECTION".to_string() });
+        },
+    };
+
+    // 3. Calculate margin with pnl and funding fee realized
+    // TO DO: find a way to implement funding fee
+    let margin_funding_adjusted: Uint256 = margin_pnl_adjusted;
+    
+    Ok((pnl,new_position_value,margin_funding_adjusted))
+
+}
+
+
+
+
+
 
 
