@@ -35,6 +35,12 @@ pub enum ExecuteMsg {
     },
     ClosePosition {
         market_addr: String
+    },
+    UpdateFunding {
+        market_addr: String
+    },
+    UpdateFundingInternal {
+        market_addr: String
     }
 }
 
@@ -44,10 +50,12 @@ pub enum QueryMsg {
     // GetCount returns the current count as a json-encoded number
     Config {},
     State {},
-    Markets {},
+    Market {
+        market_addr: String
+    },
     Position {
-        market_addr: Addr,
-        user_addr: Addr
+        market_addr: String,
+        user_addr: String
     }
 }
 
@@ -70,8 +78,9 @@ pub struct StateResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MarketsResponse {
-    pub markets: Vec<MarketItem>
+pub struct MarketResponse {
+    pub contract_addr: Addr,
+    pub cumulative_funding_premium: Decimal256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -79,17 +88,10 @@ pub struct BorrowRateResponse {
     pub rate: Decimal256
 }
 
-
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PositionResponse {
     pub margin: Uint256,
     pub openingValue: Uint256,
     pub positionSize: Uint256,
     pub direction: Direction
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MarketItem {
-    pub contract_addr: Addr
 }

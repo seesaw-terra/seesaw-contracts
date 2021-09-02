@@ -6,7 +6,7 @@ use cosmwasm_std::{
 use std::collections::HashMap;
 
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
-use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
+use terra_cosmwasm::{ExchangeRateItem, ExchangeRatesResponse, TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -118,6 +118,34 @@ impl WasmMockQuerier {
                                 .copied()
                                 .unwrap_or_default();
                             let res = TaxCapResponse { cap };
+                            SystemResult::Ok(ContractResult::from(to_binary(&res)))
+                        }
+                        TerraQuery::ExchangeRates { base_denom, quote_denoms } => {
+                            let res = ExchangeRatesResponse {
+                                base_denom: "uluna".to_string(),
+                                exchange_rates: vec![
+                                    ExchangeRateItem {
+                                        quote_denom: "uusd".to_string(),
+                                        exchange_rate: Decimal::from_ratio(1000u128, 1u128)
+                                    }
+                                ]
+                            };
+                            SystemResult::Ok(ContractResult::from(to_binary(&res)))
+                        }
+                        _ => panic!("DO NOT ENTER HERE"),
+                    }
+                } else if route == &TerraRoute::Oracle {
+                    match query_data {
+                        TerraQuery::ExchangeRates { base_denom, quote_denoms } => {
+                            let res = ExchangeRatesResponse {
+                                base_denom: "uluna".to_string(),
+                                exchange_rates: vec![
+                                    ExchangeRateItem {
+                                        quote_denom: "uusd".to_string(),
+                                        exchange_rate: Decimal::from_ratio(1000u128, 1u128)
+                                    }
+                                ]
+                            };
                             SystemResult::Ok(ContractResult::from(to_binary(&res)))
                         }
                         _ => panic!("DO NOT ENTER HERE"),

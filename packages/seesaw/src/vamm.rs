@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Addr, Uint128};
-use cosmwasm_bignumber::{Decimal256,Uint256};
+use cosmwasm_bignumber::{ Decimal256, Uint256 };
 use cw20::Cw20ReceiveMsg;
 use terraswap::asset::{AssetInfo, Asset};
 
@@ -19,7 +19,8 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     SwapIn { direction: Direction, quote_asset_amount: Uint256 }, // Used to open positions
-    SwapOut { direction: Direction, base_asset_amount: Uint256 } // Used to close position
+    SwapOut { direction: Direction, base_asset_amount: Uint256 }, // Used to close position
+    SettleFunding {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -41,9 +42,23 @@ pub struct ConfigResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum WhoPays {
+    LONG,
+    SHORT
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Funding {
+    pub amount: Decimal256,
+    pub who_pays: WhoPays
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
     pub base_asset_reserve: Uint256,
     pub quote_asset_reserve: Uint256,
+    pub funding_premium_cumulative: Decimal256,
+    pub funding_fee: Funding
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

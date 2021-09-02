@@ -1,13 +1,20 @@
-use cosmwasm_std::{Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Reply, ReplyOn, Response, StdError, StdResult, SubMsg, WasmMsg, attr, entry_point, from_binary, to_binary};
-use cosmwasm_bignumber::{Decimal256, Uint256};
-use seesaw::bank::Direction;
-use terra_cosmwasm::{ExchangeRatesResponse, TerraQuerier};
-use terraswap::asset::{ AssetInfo };
-use cw20::{ Cw20ReceiveMsg };
-use seesaw::vamm::{ ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg, StateResponse};
 use crate::state::{CONFIG, Config, OracleType, STATE, State};
+use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_std::{
+    attr, entry_point, from_binary, to_binary, Addr, Binary, CanonicalAddr, Decimal, Deps, DepsMut,
+    Env, MessageInfo, QuerierWrapper, Reply, ReplyOn, Response, StdError, StdResult, SubMsg,
+    WasmMsg,
+};
+use cw20::Cw20ReceiveMsg;
+use seesaw::bank::Direction;
+use seesaw::vamm::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, PositionResponse, QueryMsg,
+    StateResponse, Funding, WhoPays
+};
+use terra_cosmwasm::{ExchangeRatesResponse, TerraQuerier};
+use terraswap::asset::AssetInfo;
 
-use crate::{ error::ContractError };
+use crate::error::ContractError;
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -18,7 +25,6 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-
     let config = Config {
         contract_addr: deps.api.addr_canonicalize(&env.contract.address.as_str())?,
         bank_addr: deps.api.addr_canonicalize(&msg.bank_addr.as_str())?,
@@ -35,12 +41,16 @@ pub fn instantiate(
         base_asset_reserve: Uint256::from(msg.init_base_reserve), // Initialize at a certain price
         quote_asset_reserve: Uint256::from(msg.init_quote_reserve), // Initialize at a certain price
         funding_period: Uint256::from(funding_period),
+        aggregated_funding: Decimal256::from_uint256(Uint256::from(1_000_000_000u128)),
+        funding_rate: Funding {
+            amount: Decimal256::zero(),
+            who_pays: WhoPays::LONG
+        }
     };
 
     STATE.save(deps.storage, &state)?;
-    
-    Ok(Response::new().add_attributes(vec![("action", "instantiate")]))
 
+    Ok(Response::new().add_attributes(vec![("action", "instantiate")]))
 }
 
 // And declare a custom Error variant for the ones where you will want to make use of it
@@ -52,24 +62,91 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::SwapIn { quote_asset_amount, direction } => swap_in(deps, env, info, quote_asset_amount, direction),
-        ExecuteMsg::SwapOut { base_asset_amount, direction } => swap_out(deps, env, info, base_asset_amount, direction),
+        ExecuteMsg::SwapIn {
+            quote_asset_amount,
+            direction,
+        } => swap_in(deps, env, info, quote_asset_amount, direction),
+        ExecuteMsg::SwapOut {
+            base_asset_amount,
+            direction,
+        } => swap_out(deps, env, info, base_asset_amount, direction),
+        ExecuteMsg::SettleFunding {} => settle_funding(deps, env, info),
     }
 }
 
-/* 
+/*
+    Settle Funding Function
+*/
+
+pub fn settle_funding(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    if deps.api.addr_canonicalize(info.sender.as_str())? != config.bank_addr {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let spot_price = get_underlying_price(deps.as_ref())?;
+    let mark_price = get_market_price(deps.as_ref())?;
+
+    let state: State = STATE.load(deps.storage)?;
+
+    let millis_day: u128 = 24 * 60 * 60 * 1000;
+
+    // let premium: Decimal256 = spot_price - mark_price;
+
+    let mut new_state = state.clone();
+
+    let (premium, who_pays) = if spot_price > mark_price {
+        (spot_price - mark_price, WhoPays::SHORT)
+    } else {
+        (mark_price - spot_price, WhoPays::LONG)
+    };
+
+    let premium_fraction: Decimal256 = premium * Decimal256::from_uint256(state.funding_period) / Decimal256::from_uint256(millis_day);
+
+    new_state.aggregated_funding = match who_pays {
+        WhoPays::SHORT => {
+            new_state.aggregated_funding - premium_fraction
+        },
+        WhoPays::LONG => {
+            new_state.aggregated_funding + premium_fraction
+        }
+    };
+
+    new_state.funding_rate = Funding {
+        amount: premium_fraction/spot_price,
+        who_pays: who_pays // SHORT PAY LONGS
+    };
+
+    STATE.save(deps.storage, &new_state)?;
+
+    Ok(Response::default())
+}
+
+fn get_market_price(deps: Deps) -> Result<Decimal256, ContractError> {
+    let state: State = STATE.load(deps.storage)?;
+    let mark_price: Decimal256 = Decimal256::from_uint256(state.quote_asset_reserve)
+        / Decimal256::from_uint256(state.base_asset_reserve);
+    Ok(mark_price)
+}
+
+/*
     SWAP IN/OUT FUNCTIONS
 */
 
-pub fn swap_in (
-    deps: DepsMut, 
-    env: Env, 
-    info: MessageInfo, 
-    quote_asset_amount: Uint256, 
-    direction: Direction
+pub fn swap_in(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    quote_asset_amount: Uint256,
+    direction: Direction,
 ) -> Result<Response, ContractError> {
-
-    // Get amount of base we will be long/short 
+    // Get amount of base we will be long/short
     // LONG -> how much base asset returned when we open position
     // SHORT -> how much base asset we borrow when we open position
     let base_amount = simulate_swapin(deps.as_ref(), quote_asset_amount, &direction)?;
@@ -81,35 +158,34 @@ pub fn swap_in (
     match direction {
         Direction::LONG => {
             new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
-            new_state.base_asset_reserve = state.base_asset_reserve - base_amount; // Take out base asset bought
+            new_state.base_asset_reserve = state.base_asset_reserve - base_amount;
+            // Take out base asset bought
         }
         Direction::SHORT => {
             new_state.base_asset_reserve += base_amount; // Sell borrowed base assets to market
-            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Take out UST from market
+            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount;
+            // Take out UST from market
         }
         Direction::NOT_SET => {
-            return Err(ContractError::Std(StdError::generic_err("Invalid Direction").into()));
+            return Err(ContractError::Std(
+                StdError::generic_err("Invalid Direction").into(),
+            ));
         }
     }
 
     STATE.save(deps.storage, &new_state)?;
 
-    Ok(Response::new().add_attributes(vec![
-        ("action", "swap")
-    ])
-    )
-
+    Ok(Response::new().add_attributes(vec![("action", "swap")]))
 }
 
-pub fn swap_out (
-    deps: DepsMut, 
-    env: Env, 
-    info: MessageInfo, 
-    base_asset_amount: Uint256, 
-    direction: Direction
+pub fn swap_out(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    base_asset_amount: Uint256,
+    direction: Direction,
 ) -> Result<Response, ContractError> {
-
-    // Get amount of base we will be long/short 
+    // Get amount of base we will be long/short
     // LONG -> how much base asset returned when we open position
     // SHORT -> how much base asset we borrow when we open position
     let quote_asset_amount = simulate_swapout(deps.as_ref(), base_asset_amount, &direction)?;
@@ -121,57 +197,71 @@ pub fn swap_out (
     match direction {
         Direction::LONG => {
             new_state.base_asset_reserve += base_asset_amount; // Sell base assets to market
-            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount; // Get UST back
+            new_state.quote_asset_reserve = state.quote_asset_reserve - quote_asset_amount;
+            // Get UST back
         }
         Direction::SHORT => {
             new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
-            new_state.base_asset_reserve = state.base_asset_reserve - base_asset_amount; // Buy base assets to return
+            new_state.base_asset_reserve = state.base_asset_reserve - base_asset_amount;
+            // Buy base assets to return
         }
         Direction::NOT_SET => {
-            return Err(ContractError::Std(StdError::generic_err("Invalid Direction").into()));
+            return Err(ContractError::Std(
+                StdError::generic_err("Invalid Direction").into(),
+            ));
         }
     }
 
     STATE.save(deps.storage, &new_state)?;
 
-    Ok(Response::new().add_attributes(vec![
-        ("action", "swap")
-    ])
-    )
-
+    Ok(Response::new().add_attributes(vec![("action", "swap")]))
 }
-
 
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::SimulateIn  { quoteAmount, direction } => to_binary(&simulate_swapin(deps, quoteAmount, &direction)?),
-        QueryMsg::SimulateOut { baseAmount, direction } => to_binary(&simulate_swapout(deps, baseAmount, &direction)?),
+        QueryMsg::SimulateIn {
+            quoteAmount,
+            direction,
+        } => to_binary(&simulate_swapin(deps, quoteAmount, &direction)?),
+        QueryMsg::SimulateOut {
+            baseAmount,
+            direction,
+        } => to_binary(&simulate_swapout(deps, baseAmount, &direction)?),
         QueryMsg::OraclePrice {} => to_binary(&query_config(deps)?),
         QueryMsg::MarketPrice {} => to_binary(&query_config(deps)?),
-        QueryMsg::State {} => to_binary(&query_state(deps)?)
+        QueryMsg::State {} => to_binary(&query_state(deps)?),
     }
 }
 
-/* 
+/*
     AMM SIMULATION FUNCTIONS
 */
 
-pub fn simulate_swapin(deps: Deps, quoteAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
+pub fn simulate_swapin(
+    deps: Deps,
+    quoteAmount: Uint256,
+    direction: &Direction,
+) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
-    return simulate_swapin_internal(quoteAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
+    return simulate_swapin_internal(
+        quoteAmount,
+        direction,
+        state.quote_asset_reserve,
+        state.base_asset_reserve,
+    );
 }
 
-fn simulate_swapin_internal( quoteAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
+fn simulate_swapin_internal(
+    quoteAmount: Uint256,
+    direction: &Direction,
+    quote_reserve_amounts: Uint256,
+    base_reserve_amounts: Uint256,
+) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
-    
     let mut new_quote_reserve = match direction {
-        Direction::LONG => {
-            quote_reserve_amounts + quoteAmount
-        }
-        Direction::SHORT => {
-            quote_reserve_amounts - quoteAmount
-        }
+        Direction::LONG => quote_reserve_amounts + quoteAmount,
+        Direction::SHORT => quote_reserve_amounts - quoteAmount,
         Direction::NOT_SET => {
             return Err(StdError::generic_err("Invalid Direction").into());
         }
@@ -188,16 +278,27 @@ fn simulate_swapin_internal( quoteAmount: Uint256, direction: &Direction, quote_
     Ok(base_reserve_delta)
 }
 
-
-pub fn simulate_swapout(deps: Deps, baseAmount: Uint256, direction: &Direction ) -> StdResult<Uint256> {
+pub fn simulate_swapout(
+    deps: Deps,
+    baseAmount: Uint256,
+    direction: &Direction,
+) -> StdResult<Uint256> {
     let state = STATE.load(deps.storage)?;
-    return simulate_swapout_internal(baseAmount, direction,  state.quote_asset_reserve, state.base_asset_reserve);
+    return simulate_swapout_internal(
+        baseAmount,
+        direction,
+        state.quote_asset_reserve,
+        state.base_asset_reserve,
+    );
 }
 
-
-fn simulate_swapout_internal( baseAmount: Uint256, direction: &Direction, quote_reserve_amounts: Uint256, base_reserve_amounts: Uint256 ) -> StdResult<Uint256> {
+fn simulate_swapout_internal(
+    baseAmount: Uint256,
+    direction: &Direction,
+    quote_reserve_amounts: Uint256,
+    base_reserve_amounts: Uint256,
+) -> StdResult<Uint256> {
     let k: Uint256 = quote_reserve_amounts * base_reserve_amounts; // x*y = k
-    
     let mut new_base_reserve = match direction {
         Direction::LONG => {
             base_reserve_amounts + baseAmount // Longs will close position by trading in base assets, and getting back quote assets
@@ -221,8 +322,7 @@ fn simulate_swapout_internal( baseAmount: Uint256, direction: &Direction, quote_
     Ok(quote_reserve_delta)
 }
 
-
-/* 
+/*
     ORACLE FUNCTIONS
 */
 
@@ -233,10 +333,11 @@ pub fn get_underlying_price(deps: Deps) -> StdResult<Decimal256> {
     match config.oracle_type {
         OracleType::NATIVE => {
             return query_native_rate(&deps.querier, config.base_denom, config.stable_denom);
-        }
+        } // MIRROR, BAND
     }
 }
 
+// NATIVE ORACLE
 fn query_native_rate(
     querier: &QuerierWrapper,
     base_denom: String,
@@ -249,8 +350,7 @@ fn query_native_rate(
     Ok(Decimal256::from(res.exchange_rates[0].exchange_rate))
 }
 
-
-/* 
+/*
     QUERY FUNCTIONS
 */
 
@@ -268,5 +368,7 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
     Ok(StateResponse {
         quote_asset_reserve: state.quote_asset_reserve,
         base_asset_reserve: state.base_asset_reserve,
+        funding_premium_cumulative: state.aggregated_funding,
+        funding_fee: state.funding_rate
     })
 }

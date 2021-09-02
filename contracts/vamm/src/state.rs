@@ -2,10 +2,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use terraswap::asset::{AssetInfoRaw};
-use cosmwasm_std::{CanonicalAddr, Api, Storage, StdResult, Order};
+use cosmwasm_std::{Api, CanonicalAddr, Decimal, Order, StdResult, Storage};
 use cw_storage_plus::{Item,Map};
 
-use seesaw::bank::{MarketItem, Direction};
+use seesaw::{bank::{Direction}, vamm::Funding};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub enum OracleType {
@@ -25,7 +25,9 @@ pub struct Config {
 pub struct State {
     pub quote_asset_reserve: Uint256,
     pub base_asset_reserve: Uint256,
-    pub funding_period: Uint256
+    pub funding_period: Uint256,
+    pub aggregated_funding: Decimal256,
+    pub funding_rate: Funding
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");

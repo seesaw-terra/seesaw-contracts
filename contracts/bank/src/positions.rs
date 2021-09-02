@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Uint256,Decimal256};
-use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
+use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::{query_supply,query_balance};
 use cw20::{Cw20ExecuteMsg};
@@ -46,7 +46,7 @@ pub fn add_margin(
                 positionSize: Uint256::zero(),
                 openingValue: Uint256::zero(),
                 direction: Direction::NOT_SET,
-                margin: Uint256::zero()
+                margin: deposit_amount
             };
             POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position);
         }
@@ -115,6 +115,7 @@ pub fn open_position(
     new_position.openingValue = open_value;
     new_position.positionSize = position_size;
     new_position.direction = direction;
+
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
 
     // 4. Send swap messages
@@ -194,6 +195,17 @@ pub fn close_position(
     });
 
     let mut messages: Vec<CosmosMsg> = vec![];
+    messages.push(msg);
+
+    /// 5. Transfer back margin to user wallet.
+    let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+        to_address: info.sender.to_string(),
+        amount: vec![Coin {
+            denom: config.stable_denom,
+            amount: Uint128::from(margin_funding_adjusted),
+        }],
+    });
+
     messages.push(msg);
     
     // 5. Clear the position
