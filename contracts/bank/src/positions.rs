@@ -186,10 +186,13 @@ pub fn close_position(
     messages.push(msg);
     
     // 5. Clear the position
-    let mut new_position = position.clone();
-    new_position.openingValue = Uint256::zero();
-    new_position.positionSize = Uint256::zero();
-    new_position.direction = Direction::NOT_SET;
+    let mut new_position = Position {
+        margin: Uint256::zero(),
+        openingValue: Uint256::zero(),
+        positionSize: Uint256::zero(),
+        direction: Direction::NOT_SET
+    };
+
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
 
     // 6. Send swap messages

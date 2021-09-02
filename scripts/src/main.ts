@@ -21,8 +21,8 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra1td75zw457pde4srq2252letlcph4qedpaggasd';
-let vammAddr: string = 'terra1d09n5tjkl6wj6jz6ty0xeftcsmu8mptgg54z6e';
+let bankAddr: string = 'terra1m386wlfnu734w0c56gh60h8eh28kf9eussx0ph';
+let vammAddr: string = 'terra15g5wckta0ax3x9jkj2vcu3dzqk4lyuqeqlpldk';
 let walletAddr: string = 'terra1gfu9uymnr04amjtssfamzymuwna303awyz9kch';
 
 //----------------------------------------------------------------------------------------
@@ -102,11 +102,27 @@ async function queryState() {
 
 }
 
-// testAddMargin()
-// testOpenPosition()
-// queryState()
+async function querySnapshots() {
 
-testClosePosition();
+  const state_res = await query(vammAddr, {
+    market_snapshots: {}
+    }
+  )
+  console.log(state_res)
+
+}
+
+
+
+async function main() {
+  // await testAddMargin();
+  // await testOpenPosition()
+  // await testClosePosition();
+  await querySnapshots();
+  await queryState();
+}
+
+main()
 
 //----------------------------------------------------------------------------------------
 // Test 2. Swap
