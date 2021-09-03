@@ -24,7 +24,8 @@ pub struct Position {
     pub margin: Uint256, // Value of margin, in default denom
     pub direction: Direction, // true = longing, false = shorting
     pub openingValue: Uint256, // Amount of base asset (i.e. UST) that is used in shorting/longing, at the time of opening
-    pub positionSize: Uint256 // Amount of quoted assets that is being longed/shorted
+    pub positionSize: Uint256, // Amount of quoted assets that is being longed/shorted
+    pub last_cumulative_funding: Decimal256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

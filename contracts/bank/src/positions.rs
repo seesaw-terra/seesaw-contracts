@@ -46,7 +46,8 @@ pub fn add_margin(
                 positionSize: Uint256::zero(),
                 openingValue: Uint256::zero(),
                 direction: Direction::NOT_SET,
-                margin: deposit_amount
+                margin: deposit_amount,
+                last_cumulative_funding: Decimal256::zero()
             };
             POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position);
         }
@@ -79,7 +80,7 @@ pub fn open_position(
 ) -> Result<Response, ContractError> {
 
     // Crash if market doesn't exist
-    let market = MARKETS.load(deps.storage, market_addr.as_bytes());
+    let market = MARKETS.load(deps.storage, market_addr.as_bytes())?;
 
     let position = POSITIONS.load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 
@@ -115,6 +116,7 @@ pub fn open_position(
     new_position.openingValue = open_value;
     new_position.positionSize = position_size;
     new_position.direction = direction;
+    new_position.last_cumulative_funding = market.cumulative_funding_premium;
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
 
@@ -190,7 +192,8 @@ pub fn close_position(
         margin: Uint256::zero(),
         openingValue: Uint256::zero(),
         positionSize: Uint256::zero(),
-        direction: Direction::NOT_SET
+        direction: Direction::NOT_SET,
+        last_cumulative_funding: Decimal256::zero()
     };
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
@@ -205,8 +208,6 @@ pub fn close_position(
         ])
     )
 }
-
-
 
 // Add Margin to a vAMM of selection
 pub fn simulate_close(
@@ -224,15 +225,42 @@ pub fn simulate_close(
         msg: to_binary(&VammQueryMsg::SimulateOut { baseAmount: position.positionSize.clone(), direction: position.direction.clone() })?,
     }))?;
 
+   // 3. Calculate funding fee realized
+    // TO DO: find a way to implement funding fee
+    let market: Market = MARKETS.load(deps.storage, &market_addr.as_bytes())?;
+
+    let funding: Decimal256 = if market.cumulative_funding_premium > position.last_cumulative_funding {
+        (market.cumulative_funding_premium - position.last_cumulative_funding) * Decimal256::from_uint256(position.positionSize)
+    } else {
+        (position.last_cumulative_funding - market.cumulative_funding_premium) * Decimal256::from_uint256(position.positionSize)
+    };
+
     // 2. Calculate margin with pnl realized
-    let margin_pnl_adjusted: Uint256 = match position.direction {
+    let margin_funding_pnl_adjusted: Uint256 = match position.direction {
         Direction::LONG => {
             // margin_pnl_adjusted = old_margin + (curr_value - open_value) = old_margin - open_value + curr_value
-            safe_subtract_min_zero(position.margin + new_position_value, position.openingValue)
+            let intermediary1 = position.margin + new_position_value;
+
+            let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
+                safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium increased, pays
+            } else {
+                intermediary1 + funding * Uint256::one() // If funding premium decreased, gets paid
+            };
+            
+            safe_subtract_min_zero(intermediary2, position.openingValue)
+
         },
         Direction::SHORT => {
-            // margin_pnl_adjusted = old_margin + (open_value - curr_value) = old_margin + open_value - curr_value
-            safe_subtract_min_zero(position.margin + position.openingValue, new_position_value)
+
+            let intermediary1 = position.margin + position.openingValue;
+
+            let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
+                intermediary1 + funding * Uint256::one() // If funding premium increased, gets paid
+            } else {
+                safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium decreased, pays
+            };
+            
+            safe_subtract_min_zero(intermediary2, new_position_value)
         },
         Direction::NOT_SET => {
             return Err(StdError::GenericErr { msg: "UNSET DIRECTION".to_string() });
@@ -254,11 +282,7 @@ pub fn simulate_close(
         },
     };
 
-    // 3. Calculate margin with pnl and funding fee realized
-    // TO DO: find a way to implement funding fee
-    let margin_funding_adjusted: Uint256 = margin_pnl_adjusted;
-    
-    Ok((pnl,new_position_value,margin_funding_adjusted))
+    Ok((pnl,new_position_value,margin_funding_pnl_adjusted))
 
 }
 

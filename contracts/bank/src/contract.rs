@@ -235,7 +235,7 @@ fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<Posi
     let margin_ratio: Decimal256 = Decimal256::from_ratio(margin_adjusted, position.openingValue);
 
     Ok(PositionResponse {
-        margin: position.margin,
+        margin: position.margin, 
         margin_left: margin_adjusted,
         openingValue: position.openingValue,
         positionSize: position.positionSize,

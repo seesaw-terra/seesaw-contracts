@@ -21,8 +21,8 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra1m386wlfnu734w0c56gh60h8eh28kf9eussx0ph';
-let vammAddr: string = 'terra15g5wckta0ax3x9jkj2vcu3dzqk4lyuqeqlpldk';
+let bankAddr: string = 'terra1r5rfxzy9xzzyxsczaqlw5vl8yg3le5gwk7cg36';
+let vammAddr: string = 'terra18hqm63gsspexezf9k5wnmp94jlu4cp3g5uazj7';
 let walletAddr: string = 'terra1gfu9uymnr04amjtssfamzymuwna303awyz9kch';
 
 //----------------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ async function testAddMargin() {
   const res = await execute(mainWallet, bankAddr, {
     deposit_stable: {
       market_addr: vammAddr
-    }},'100000uusd'
+    }},'100000uusd' // UST value of margin
   )
 
   const poolUUsd = await queryNativeTokenBalance(terra, bankAddr, "uusd");
@@ -55,7 +55,7 @@ async function testOpenPosition() {
   const open_res = await execute(mainWallet, bankAddr, {
     open_position: {
       market_addr: vammAddr,
-      open_value: "2000000",
+      open_value: "200000", //UST value of position
       direction: "l_o_n_g"
     }}
   )
@@ -112,14 +112,26 @@ async function querySnapshots() {
 
 }
 
+async function queryPosition() {
+
+  const state_res = await query(bankAddr, {
+    position: { vammAddr, walletAddr}
+    }
+  )
+  console.log(state_res)
+
+}
+
+
 
 
 async function main() {
   // await testAddMargin();
   // await testOpenPosition()
   // await testClosePosition();
-  await querySnapshots();
-  await queryState();
+  // await querySnapshots();
+  // await queryState();
+  await queryPosition()
 }
 
 main()
