@@ -4,7 +4,7 @@ use protobuf::Message;
 use terraswap::asset::{AssetInfo};
 use terraswap::token::InstantiateMsg as TokenInstantiateMsg;
 use cw20::{MinterResponse, Cw20ReceiveMsg};
-use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, Direction, ExecuteMsg, InstantiateMsg, MarketResponse, PositionResponse, QueryMsg, StateResponse};
+use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, Direction, ExecuteMsg, FundingResponse, InstantiateMsg, MarketResponse, PositionResponse, QueryMsg, Sign, StateResponse};
 use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg, StateResponse as VammStateResponse};
 
 use crate::error::ContractError;
@@ -233,11 +233,12 @@ fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<Posi
             direction: position.direction,
             current_value: position.openingValue,
             margin_ratio: Decimal256::from_uint256(1u128),
-            pnl: 0i64
+            pnl: 0i64,
+            funding: FundingResponse { amount: Uint256::zero(), sign: Sign::Positive }
         });
     }
 
-    let (pnl, new_position_value, margin_adjusted) = simulate_close(deps, amm_addr, position.clone())?;
+    let (pnl, funding_response, new_position_value, margin_adjusted) = simulate_close(deps, amm_addr, position.clone())?;
 
     let margin_ratio: Decimal256 = Decimal256::from_ratio(margin_adjusted, position.openingValue);
 
@@ -250,6 +251,7 @@ fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<Posi
         current_value: new_position_value,
         margin_ratio: margin_ratio,
         pnl: pnl,
+        funding: funding_response
     })
 }
 

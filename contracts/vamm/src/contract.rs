@@ -201,7 +201,7 @@ pub fn swap_in(
             new_state.quote_asset_reserve += quote_asset_amount; // Send UST into market
             new_state.base_asset_reserve = state.base_asset_reserve - base_amount;
 
-            let delta : i64 = u128::from(Uint128::from(base_amount)) as i64;
+            let delta : i64 = u128::from(Uint128::from(base_amount)) as i64; // Positive delta if long
 
             let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
             SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;
@@ -263,8 +263,7 @@ pub fn swap_out(
             new_state.base_asset_reserve = state.base_asset_reserve - base_asset_amount;
             // Buy base assets to return
 
-            let mut delta : i64 = u128::from(Uint128::from(base_asset_amount)) as i64;
-            delta = -delta; // Positive delta on closing if short
+            let mut delta : i64 = u128::from(Uint128::from(base_asset_amount)) as i64; // Positive delta on closing if short
 
             let new_market_snapshots = create_snapshots(deps.as_ref(), &env, new_state.quote_asset_reserve, new_state.base_asset_reserve, delta)?;
             SNAPSHOTS.save(deps.storage, &new_market_snapshots)?;

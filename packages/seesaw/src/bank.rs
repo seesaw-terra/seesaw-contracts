@@ -101,6 +101,20 @@ pub struct BorrowRateResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+pub enum Sign {
+    Positive,
+    Negative
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct FundingResponse {
+    pub amount: Uint256,
+    pub sign: Sign
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct PositionResponse {
     pub margin: Uint256,
     pub margin_left: Uint256,
@@ -110,4 +124,5 @@ pub struct PositionResponse {
     pub positionSize: Uint256,
     pub direction: Direction,
     pub pnl: i64,
+    pub funding: FundingResponse
 }

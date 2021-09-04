@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BankMsg, Coin, ContractResult, CosmosMsg, Decimal, Reply, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg, from_binary, to_binary};
@@ -15,6 +17,8 @@ fn add_margin() {
 
     let msg = InstantiateMsg {
         stable_denom: "uusd".to_string(),
+        liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
+        liquidation_reward: Decimal256::from_str("0.05").unwrap(),
     };
 
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -62,7 +66,10 @@ fn open_position() {
 
     let msg = InstantiateMsg {
         stable_denom: "uusd".to_string(),
+        liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
+        liquidation_reward: Decimal256::from_str("0.05").unwrap(),
     };
+
 
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -116,7 +123,10 @@ fn close_position() {
 
     let msg = InstantiateMsg {
         stable_denom: "uusd".to_string(),
+        liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
+        liquidation_reward: Decimal256::from_str("0.05").unwrap(),
     };
+
 
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -179,5 +189,17 @@ fn close_position() {
             }]
         }))
     );
+
+}
+
+
+#[test]
+fn test_types() {
+
+    let u128 = Uint128::from(2000000u128);
+    let i64 = u128::from(u128) as i64;
+
+    assert_eq!(i64, 0i64);
+
 
 }

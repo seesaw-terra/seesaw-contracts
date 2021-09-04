@@ -8,7 +8,7 @@ use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg };
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, STATE, State, POSITIONS, Position, MARKETS, Market };
 
-use seesaw::bank::{ Direction };
+use seesaw::bank::{Direction, FundingResponse, Sign};
 
 // Add Margin to a vAMM of selection
 pub fn add_margin(
@@ -161,7 +161,7 @@ pub fn close_position(
 
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let (_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?;
+    let (_,_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?;
 
     /// 4. Perform Swap on vAMM
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -215,7 +215,7 @@ pub fn simulate_close(
     market_addr: Addr,
     position: Position
     // Returns PNL, New Position Size, MarginLeft
-) -> StdResult<(i64, Uint256, Uint256)> {
+) -> StdResult<(i64, FundingResponse, Uint256, Uint256)> {
 
     let config: Config = CONFIG.load(deps.storage)?;
 
@@ -235,6 +235,8 @@ pub fn simulate_close(
         (position.last_cumulative_funding - market.cumulative_funding_premium) * Decimal256::from_uint256(position.positionSize)
     };
 
+    let mut funding_response: FundingResponse;
+
     // 2. Calculate margin with pnl and funding realized
     let margin_funding_pnl_adjusted: Uint256 = match position.direction {
         Direction::LONG => {
@@ -242,8 +244,16 @@ pub fn simulate_close(
             let intermediary1 = position.margin + new_position_value;
 
             let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
+                funding_response = FundingResponse {
+                    amount: funding * Uint256::one(),
+                    sign: Sign::Negative
+                };
                 safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium increased, pays
             } else {
+                funding_response = FundingResponse {
+                    amount: funding * Uint256::one(),
+                    sign: Sign::Positive
+                };
                 intermediary1 + funding * Uint256::one() // If funding premium decreased, gets paid
             };
             
@@ -255,8 +265,16 @@ pub fn simulate_close(
             let intermediary1 = position.margin + position.openingValue;
 
             let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
+                funding_response = FundingResponse {
+                    amount: funding * Uint256::one(),
+                    sign: Sign::Positive
+                };
                 intermediary1 + funding * Uint256::one() // If funding premium increased, gets paid
             } else {
+                funding_response = FundingResponse {
+                    amount: funding * Uint256::one(),
+                    sign: Sign::Negative
+                };
                 safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium decreased, pays
             };
             
@@ -284,7 +302,7 @@ pub fn simulate_close(
         },
     };
 
-    Ok((pnl,new_position_value,margin_funding_pnl_adjusted))
+    Ok((pnl,funding_response,new_position_value,margin_funding_pnl_adjusted))
 
 }
 
@@ -311,7 +329,7 @@ pub fn liquidate(
 
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let (_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?; //  Get current margin
+    let (_,_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?; //  Get current margin
 
     // 2. Check ratio
 
