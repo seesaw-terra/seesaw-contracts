@@ -18,4 +18,8 @@ pub enum ContractError {
 
     #[error("Position still open")]
     PositionNotOpen {},
+
+    #[error("Position margin ratio is outiside lqiuidatio range")]
+    Unliquidatable {},
+
 }

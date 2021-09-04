@@ -10,7 +10,7 @@ use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg, State
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market };
 use crate::response::MsgInstantiateContractResponse;
-use crate::positions::{add_margin, close_position, open_position, simulate_close};
+use crate::positions::{add_margin, close_position, liquidate, open_position, simulate_close};
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -25,6 +25,8 @@ pub fn instantiate(
         contract_addr: deps.api.addr_canonicalize(&env.contract.address.as_str())?,
         owner_addr: deps.api.addr_canonicalize(&info.sender.as_str())?,
         stable_denom: msg.stable_denom,
+        liquidation_ratio: msg.liquidation_ratio,
+        liquidation_reward: msg.liquidation_reward
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -63,6 +65,11 @@ pub fn execute(
         ExecuteMsg::ClosePosition { market_addr } => {
             let valid_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;
             close_position(deps, env, info, valid_addr)
+        },
+        ExecuteMsg::Liquidate { market_addr, holder_addr } => {
+            let valid_market_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;
+            let valid_holder_addr: Addr = deps.api.addr_validate(&holder_addr.as_str())?;
+            liquidate(deps, env, info, valid_market_addr, valid_holder_addr )
         },
         ExecuteMsg::UpdateFunding { market_addr } => {
             let valid_addr: Addr = deps.api.addr_validate(&market_addr.as_str())?;

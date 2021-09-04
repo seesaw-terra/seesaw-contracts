@@ -12,6 +12,8 @@ pub struct Config {
     pub contract_addr: CanonicalAddr,
     pub owner_addr: CanonicalAddr,
     pub stable_denom: String,
+    pub liquidation_ratio: Decimal256,
+    pub liquidation_reward: Decimal256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

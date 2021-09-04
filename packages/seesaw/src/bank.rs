@@ -16,6 +16,8 @@ pub enum Direction {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct InstantiateMsg {
+    pub liquidation_reward: Decimal256,
+    pub liquidation_ratio: Decimal256,
     pub stable_denom: String
 }
 
@@ -36,6 +38,10 @@ pub enum ExecuteMsg {
     },
     ClosePosition {
         market_addr: String
+    },
+    Liquidate {
+        market_addr: String,
+        holder_addr: String
     },
     UpdateFunding {
         market_addr: String
