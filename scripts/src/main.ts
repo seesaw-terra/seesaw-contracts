@@ -21,8 +21,8 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra1r5rfxzy9xzzyxsczaqlw5vl8yg3le5gwk7cg36';
-let vammAddr: string = 'terra18hqm63gsspexezf9k5wnmp94jlu4cp3g5uazj7';
+let bankAddr: string = 'terra14ad9fgkam278tr27u6wrstlxdzutpqh52xwll2';
+let vammAddr: string = 'terra1qr59t3nzj5lm9pmd5zx6qjhy0j4n8vq38w3kze';
 let walletAddr: string = 'terra1gfu9uymnr04amjtssfamzymuwna303awyz9kch';
 
 //----------------------------------------------------------------------------------------
@@ -114,11 +114,14 @@ async function querySnapshots() {
 
 async function queryPosition() {
 
-  const state_res = await query(bankAddr, {
-    position: { vammAddr, walletAddr}
+  const position_res = await query(bankAddr, {
+    position: {
+      market_addr: vammAddr,
+      user_addr: walletAddr
+    }
     }
   )
-  console.log(state_res)
+  console.log(position_res)
 
 }
 
@@ -126,8 +129,8 @@ async function queryPosition() {
 
 
 async function main() {
-  // await testAddMargin();
-  // await testOpenPosition()
+  await testAddMargin();
+  await testOpenPosition()
   // await testClosePosition();
   // await querySnapshots();
   // await queryState();

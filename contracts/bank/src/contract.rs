@@ -222,7 +222,7 @@ fn query_markets(deps: Deps, market_addr: Addr) -> StdResult<MarketResponse> {
 }
 
 fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<PositionResponse> {
-    let position = POSITIONS.load(deps.storage, (&amm_addr.as_bytes(), user_addr.as_bytes()))?;
+    let position = POSITIONS.load(deps.storage, (&amm_addr.as_bytes(), &user_addr.as_bytes()))?;
 
     if position.direction == Direction::NOT_SET {
         return Ok(PositionResponse {

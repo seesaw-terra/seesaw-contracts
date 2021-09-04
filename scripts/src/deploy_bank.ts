@@ -5,7 +5,9 @@ import { mainWallet, init, upload, execute } from './utils';
     await delay(1000)
 
     const bank_addr = await init(mainWallet, bank_codeId, { 
-        stable_denom: 'uusd'
+        stable_denom: 'uusd',
+        liquidation_reward: '0.05',
+        liquidation_ratio: '0.0625'
     }, true)
 
     console.log(typeof(bank_addr));

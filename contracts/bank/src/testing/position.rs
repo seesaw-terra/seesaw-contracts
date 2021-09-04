@@ -109,7 +109,7 @@ fn open_position() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Position { market_addr: "bank0000".to_string(), user_addr: "depositor".to_string() }).unwrap();
     let position: PositionResponse = from_binary(&res).unwrap();
 
-    assert_eq!(position.openingValue, Uint256::from(500u128));
+    assert_eq!(position.current_value, Uint256::from(500u128));
     assert_eq!(position.positionSize, Uint256::from(50u128));
 
 }
