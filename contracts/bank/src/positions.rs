@@ -315,7 +315,7 @@ pub fn liquidate(
 
     // 2. Check ratio
 
-    let margin_ratio: Decimal256 = Decimal256::from_ratio(margin_adjusted, position.margin);
+    let margin_ratio: Decimal256 = Decimal256::from_ratio(margin_adjusted, position.openingValue);
 
     // if current ratio is outside liquidation threshhold, throw error
     if margin_ratio > config.liquidation_ratio {
@@ -336,8 +336,8 @@ pub fn liquidate(
     messages.push(msg);
 
     // 4. Split margin for liquidators and for users
-    let margin_to_liquidators = if position.margin * config.liquidation_reward > margin_adjusted {
-        position.margin * config.liquidation_reward
+    let margin_to_liquidators = if position.openingValue * config.liquidation_reward > margin_adjusted {
+        position.openingValue * config.liquidation_reward
     } else {
         margin_adjusted
     };
