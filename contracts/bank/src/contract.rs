@@ -32,12 +32,6 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
-    // Get Initial Anchor Index
-    let state: VammStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.anchor_addr.to_string(),
-        msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
-    }))?;
-
     let state = State { };
 
     STATE.save(deps.storage, &state)?;
@@ -175,6 +169,14 @@ pub fn register_market(
         msg: to_binary(&VammQueryMsg::State { })?,
     }))?;
 
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    // Get Initial Anchor Index
+    let anchor_state: AnchorStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.anchor_addr.to_string(),
+        msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
+    }))?;
+
     let market = Market {
         contract_addr: deps.api.addr_canonicalize(contract_addr.as_str())?,
         cumulative_funding_premium: market_state.funding_premium_cumulative,
@@ -183,7 +185,7 @@ pub fn register_market(
         total_long_margin: Uint256::zero(),
         total_short_margin: Uint256::zero(),
         total_margin: Uint256::zero(),
-        last_anchor_index: Decimal256::zero()
+        last_anchor_index: anchor_state.global_interest_index
     };
 
     MARKETS.save(deps.storage, key, &market)?;
