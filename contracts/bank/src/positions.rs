@@ -40,8 +40,6 @@ pub fn add_margin(
 
     //  3. Load previous position, if new user, create new position
     let positions_res  = POSITIONS.may_load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
-
-    let anchor_addr = "wdw";
     
     match positions_res {
         None => {
@@ -69,7 +67,7 @@ pub fn add_margin(
 
     // Send deposit to Anchor
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: anchor_addr.to_string(),
+        contract_addr: config.anchor_addr.to_string(),
         msg: to_binary(&AnchorExecuteMsg::DepositStable { })?,
         funds: vec![Coin {
             amount: Uint128::from(deposit_amount),
