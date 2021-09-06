@@ -19,7 +19,7 @@ import { mainWallet, init, upload, execute } from './utils';
         stable_denom: 'uusd',
         bank_addr: bank_addr,
         init_base_reserve: '1000000000',
-        init_quote_reserve: '1000000000000'
+        init_quote_reserve: '32300000000'
     }, true)
 
     const res = await execute(mainWallet, bank_addr, {
