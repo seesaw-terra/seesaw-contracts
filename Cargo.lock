@@ -20,6 +20,7 @@ dependencies = [
  "cw2",
  "cw20",
  "integer-sqrt",
+ "moneymarket",
  "protobuf",
  "schemars",
  "seesaw",
@@ -418,6 +419,20 @@ name = "libc"
 version = "0.2.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cb00336871be5ed2c8ed44b60ae9959dc5b9f08539422ed43f09e34ecaeba21"
+
+[[package]]
+name = "moneymarket"
+version = "0.2.0"
+dependencies = [
+ "cosmwasm-bignumber",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+]
 
 [[package]]
 name = "num-traits"

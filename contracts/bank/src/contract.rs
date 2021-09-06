@@ -6,6 +6,7 @@ use terraswap::token::InstantiateMsg as TokenInstantiateMsg;
 use cw20::{MinterResponse, Cw20ReceiveMsg};
 use seesaw::bank::{BorrowRateResponse, ConfigResponse, Cw20HookMsg, Direction, ExecuteMsg, FundingResponse, InstantiateMsg, MarketResponse, PositionResponse, QueryMsg, Sign, StateResponse};
 use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg, StateResponse as VammStateResponse};
+use moneymarket::market::{QueryMsg as AnchorQueryMsg, StateResponse as AnchorStateResponse};
 
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, POSITIONS, Position, STATE, State, MARKETS, Market };
@@ -24,15 +25,20 @@ pub fn instantiate(
     let config = Config {
         contract_addr: deps.api.addr_canonicalize(&env.contract.address.as_str())?,
         owner_addr: deps.api.addr_canonicalize(&info.sender.as_str())?,
+        anchor_addr: deps.api.addr_canonicalize(&msg.anchor_addr.as_str())?,
         stable_denom: msg.stable_denom,
         liquidation_ratio: msg.liquidation_ratio,
-        liquidation_reward: msg.liquidation_reward
+        liquidation_reward: msg.liquidation_reward,
     };
     CONFIG.save(deps.storage, &config)?;
 
-    let state = State {
-        last_cumulative_funding_fee: env.block.height
-    };
+    // Get Initial Anchor Index
+    let state: VammStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.anchor_addr.to_string(),
+        msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
+    }))?;
+
+    let state = State { };
 
     STATE.save(deps.storage, &state)?;
     
@@ -171,7 +177,13 @@ pub fn register_market(
 
     let market = Market {
         contract_addr: deps.api.addr_canonicalize(contract_addr.as_str())?,
-        cumulative_funding_premium: market_state.funding_premium_cumulative
+        cumulative_funding_premium: market_state.funding_premium_cumulative,
+        cumulative_long_rewards: Decimal256::zero(),
+        cumulative_short_rewards: Decimal256::zero(),
+        total_long_margin: Uint256::zero(),
+        total_short_margin: Uint256::zero(),
+        total_margin: Uint256::zero(),
+        last_anchor_index: Decimal256::zero()
     };
 
     MARKETS.save(deps.storage, key, &market)?;
@@ -208,9 +220,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 
 fn query_state(deps: Deps) -> StdResult<StateResponse> {
     let state = STATE.load(deps.storage)?;
-    Ok(StateResponse {
-        last_cumulative_funding_fee: state.last_cumulative_funding_fee,
-    })
+    Ok(StateResponse {})
 }
 
 fn query_markets(deps: Deps, market_addr: Addr) -> StdResult<MarketResponse> {

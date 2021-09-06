@@ -1,9 +1,11 @@
 use cosmwasm_bignumber::{Uint256,Decimal256};
-use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
+use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Querier, QuerierWrapper, QueryRequest, Response, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
+use moneymarket::custody::Cw20HookMsg;
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::{query_supply,query_balance};
 use cw20::{Cw20ExecuteMsg};
-use seesaw::vamm::{ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg };
+use seesaw::vamm::{WhoPays, ExecuteMsg as VammExecuteMsg, QueryMsg as VammQueryMsg, StateResponse as VammStateResponse, Funding};
+use moneymarket::market::{ExecuteMsg as AnchorExecuteMsg, QueryMsg as AnchorQueryMsg, ConfigResponse as AnchorConfigResponse, StateResponse as AnchorStateResponse, Cw20HookMsg as AnchorCw20HookMsg };
 
 use crate::error::ContractError;
 use crate::state::{ CONFIG, Config, STATE, State, POSITIONS, Position, MARKETS, Market };
@@ -39,6 +41,8 @@ pub fn add_margin(
     //  3. Load previous position, if new user, create new position
     let positions_res  = POSITIONS.may_load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 
+    let anchor_addr = "wdw";
+    
     match positions_res {
         None => {
             //  4a. Create new position and add margin
@@ -47,7 +51,9 @@ pub fn add_margin(
                 openingValue: Uint256::zero(),
                 direction: Direction::NOT_SET,
                 margin: deposit_amount,
-                last_cumulative_funding: Decimal256::zero()
+                last_cumulative_funding: Decimal256::zero(),
+                last_cumulative_long_rewards: Decimal256::zero(),
+                last_cumulative_short_rewards: Decimal256::zero(),
             };
             POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position);
         }
@@ -59,7 +65,19 @@ pub fn add_margin(
         }
     };
 
-    let messages: Vec<CosmosMsg> = vec![];
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    // Send deposit to Anchor
+    let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: anchor_addr.to_string(),
+        msg: to_binary(&AnchorExecuteMsg::DepositStable { })?,
+        funds: vec![Coin {
+            amount: Uint128::from(deposit_amount),
+            denom: "uusd".to_string()
+        }],
+    });
+
+    messages.push(msg);
 
     Ok(Response::new().add_messages(messages)
         .add_attributes(vec![
@@ -80,7 +98,7 @@ pub fn open_position(
 ) -> Result<Response, ContractError> {
 
     // Crash if market doesn't exist
-    let market = MARKETS.load(deps.storage, market_addr.as_bytes())?;
+    let mut market = MARKETS.load(deps.storage, market_addr.as_bytes())?;
 
     let position = POSITIONS.load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 
@@ -111,12 +129,35 @@ pub fn open_position(
         msg: to_binary(&VammQueryMsg::SimulateIn { quoteAmount: open_value, direction: direction.clone(), })?,
     }))?;
     
-    // 3. Update position to reflect opened position
+    let state: State = STATE.load(deps.storage)?;
+
+    // 3. Update Pool's Anchor Reward Distribution
+    update_anchor_rewards(deps.storage, deps.querier, market_addr.clone());
+
+    // 4. Update Market total margins
+    match direction {
+        Direction::LONG => {
+            market.total_long_margin += position.margin;
+            market.total_margin += position.margin;
+        },
+        Direction::SHORT => {
+            market.total_short_margin += position.margin;
+            market.total_margin += position.margin;
+        },
+        Direction::NOT_SET => {
+            // Throw error if invalid query
+            return Err(ContractError::PositionNotOpen {});
+        }
+    }
+
+    // 5. Update position to reflect opened position
     let mut new_position = position.clone();
     new_position.openingValue = open_value;
     new_position.positionSize = position_size;
     new_position.direction = direction;
     new_position.last_cumulative_funding = market.cumulative_funding_premium;
+    new_position.last_cumulative_long_rewards = market.cumulative_long_rewards;
+    new_position.last_cumulative_short_rewards = market.cumulative_short_rewards;
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
 
@@ -149,7 +190,7 @@ pub fn close_position(
 ) -> Result<Response, ContractError> {
 
     // Crash if market doesn't exist
-    let market = MARKETS.load(deps.storage, market_addr.as_bytes());
+    let mut market = MARKETS.load(deps.storage, market_addr.as_bytes())?;
 
     let position: Position = POSITIONS.load(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()))?;
 
@@ -163,6 +204,8 @@ pub fn close_position(
 
     let (_,_,_,margin_adjusted) = simulate_close(deps.as_ref(), market_addr.clone(), position.clone())?;
 
+    let mut messages: Vec<CosmosMsg> = vec![];
+
     /// 4. Perform Swap on vAMM
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: market_addr.to_string(),
@@ -173,10 +216,37 @@ pub fn close_position(
         funds: vec![],
     });
 
-    let mut messages: Vec<CosmosMsg> = vec![];
     messages.push(msg);
 
-    /// 5. Transfer back margin to user wallet.
+    /// 5. Redeem Tokens from Anchor
+    
+    // Get current anchor exchange rate
+
+    let anchor_config: AnchorConfigResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.anchor_addr.to_string(),
+        msg: to_binary(&AnchorQueryMsg::Config { })?,
+    }))?;
+
+    let anchor_state: AnchorStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.anchor_addr.to_string(),
+        msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
+    }))?;
+
+    // Get amount of aTokens equivalence of margin_adjusted
+    let a_token_to_redeem = margin_adjusted * anchor_state.prev_exchange_rate;
+    let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: anchor_config.aterra_contract.to_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Send {
+            contract: config.anchor_addr.to_string(),
+            amount: Uint128::from(a_token_to_redeem), 
+            msg: to_binary(&AnchorCw20HookMsg::RedeemStable {}
+
+            )?
+        })?,
+        funds: vec![],
+    });
+
+    /// 6. Transfer back margin to user wallet.
     let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
         to_address: info.sender.to_string(),
         amount: vec![Coin {
@@ -186,19 +256,40 @@ pub fn close_position(
     });
 
     messages.push(msg);
+
+    // 7. Update Pool's Anchor Reward Distribution
+    update_anchor_rewards(deps.storage, deps.querier, market_addr.clone());
+
+    // 8. Update Market total margins
+    match position.direction {
+        Direction::LONG => {
+            market.total_long_margin = market.total_long_margin - position.margin;
+            market.total_margin = market.total_margin - position.margin;
+        },
+        Direction::SHORT => {
+            market.total_short_margin = market.total_short_margin - position.margin;
+            market.total_margin = market.total_margin - position.margin;
+        },
+        Direction::NOT_SET => {
+            // Throw error if invalid query
+            return Err(ContractError::PositionNotOpen {});
+        }
+    }
     
-    // 5. Clear the position
+    // 9. Clear the position
     let mut new_position = Position {
         margin: Uint256::zero(),
         openingValue: Uint256::zero(),
         positionSize: Uint256::zero(),
         direction: Direction::NOT_SET,
-        last_cumulative_funding: Decimal256::zero()
+        last_cumulative_funding: Decimal256::zero(),
+        last_cumulative_long_rewards: Decimal256::zero(),
+        last_cumulative_short_rewards: Decimal256::zero(),
     };
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
 
-    // 6. Send swap messages
+    // 7. Send swap messages
     Ok(Response::new()
         .add_messages(messages)
         .add_attributes(vec![
@@ -225,8 +316,7 @@ pub fn simulate_close(
         msg: to_binary(&VammQueryMsg::SimulateOut { baseAmount: position.positionSize.clone(), direction: position.direction.clone() })?,
     }))?;
 
-   // 3. Calculate funding fee realized
-    // TO DO: find a way to implement funding fee
+   // 2. Calculate funding fee realized
     let market: Market = MARKETS.load(deps.storage, &market_addr.as_bytes())?;
 
     let funding: Decimal256 = if market.cumulative_funding_premium > position.last_cumulative_funding {
@@ -237,24 +327,42 @@ pub fn simulate_close(
 
     let mut funding_response: FundingResponse;
 
-    // 2. Calculate margin with pnl and funding realized
+    // 3. Calculate how much user's funding fees are subsidized by anchor
+
+    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(deps.storage, deps.querier, market_addr)?;
+
+    // Get amount of anchor rewards distributed to user
+    let anchor_help =  match position.direction {
+        Direction::LONG => {
+            (cumulative_long_rewards - position.last_cumulative_long_rewards) * position.margin
+        },
+        Direction::SHORT => {
+            (cumulative_short_rewards - position.last_cumulative_short_rewards) * position.margin
+        },
+        Direction::NOT_SET => {
+            return Err(StdError::GenericErr { msg: "UNSET DIRECTION".to_string() });
+        },
+    };
+
+    // 4. Calculate margin with pnl and funding realized
     let margin_funding_pnl_adjusted: Uint256 = match position.direction {
         Direction::LONG => {
             // margin_pnl_adjusted = old_margin + (curr_value - open_value) = old_margin - open_value + curr_value
             let intermediary1 = position.margin + new_position_value;
+            let intermediary_anchor_help = intermediary1 + anchor_help;
 
             let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
                 funding_response = FundingResponse {
                     amount: funding * Uint256::one(),
                     sign: Sign::Negative
                 };
-                safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium increased, pays
+                safe_subtract_min_zero(intermediary_anchor_help, funding * Uint256::one()) // If funding premium increased, pays
             } else {
                 funding_response = FundingResponse {
                     amount: funding * Uint256::one(),
                     sign: Sign::Positive
                 };
-                intermediary1 + funding * Uint256::one() // If funding premium decreased, gets paid
+                intermediary_anchor_help + funding * Uint256::one() // If funding premium decreased, gets paid
             };
             
             safe_subtract_min_zero(intermediary2, position.openingValue)
@@ -263,19 +371,20 @@ pub fn simulate_close(
         Direction::SHORT => {
 
             let intermediary1 = position.margin + position.openingValue;
+            let intermediary_anchor_help = intermediary1 + anchor_help;
 
             let intermediary2 = if market.cumulative_funding_premium > position.last_cumulative_funding {
                 funding_response = FundingResponse {
                     amount: funding * Uint256::one(),
                     sign: Sign::Positive
                 };
-                intermediary1 + funding * Uint256::one() // If funding premium increased, gets paid
+                intermediary_anchor_help + funding * Uint256::one() // If funding premium increased, gets paid
             } else {
                 funding_response = FundingResponse {
                     amount: funding * Uint256::one(),
                     sign: Sign::Negative
                 };
-                safe_subtract_min_zero(intermediary1, funding * Uint256::one()) // If funding premium decreased, pays
+                safe_subtract_min_zero(intermediary_anchor_help, funding * Uint256::one()) // If funding premium decreased, pays
             };
             
             safe_subtract_min_zero(intermediary2, new_position_value)
@@ -389,7 +498,9 @@ pub fn liquidate(
         openingValue: Uint256::zero(),
         positionSize: Uint256::zero(),
         direction: Direction::NOT_SET,
-        last_cumulative_funding: Decimal256::zero()
+        last_cumulative_funding: Decimal256::zero(),
+        last_cumulative_long_rewards: Decimal256::zero(),
+        last_cumulative_short_rewards: Decimal256::zero(),
     };
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
@@ -403,6 +514,61 @@ pub fn liquidate(
             ("positionSize", new_position.positionSize.to_string().as_str())
         ])
     )
+}
+
+
+pub fn get_anchor_cumulative(
+    storage: &dyn Storage,
+    querier: &QuerierWrapper
+) -> StdResult<Decimal256> {
+    // Get Current Anchor Interest Index
+    let config = CONFIG.load(storage)?;
+
+    let anchor_state: AnchorStateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.anchor_addr.to_string(),
+        msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
+    }))?;
+
+    Ok(anchor_state.global_interest_index)
+}
+
+fn get_current_anchor_cumulative_rewards(storage: &dyn Storage, querier: QuerierWrapper, market_addr: Addr) -> StdResult<(Decimal256, Decimal256)> {
+    let vamm_state: VammStateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: market_addr.to_string(),
+        msg: to_binary(&VammQueryMsg::State {  })?,
+    }))?;
+
+    let mut market: Market = MARKETS.load(storage, &market_addr.as_bytes())?;
+
+    let curr_anchor_index = get_anchor_cumulative(storage, &querier)?;
+
+    match vamm_state.funding_fee.who_pays {
+        WhoPays::LONG => {
+            // IF Longs are paying, help them pay with pool rewards
+            market.cumulative_long_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_long_margin));
+        },
+        WhoPays::SHORT => {
+            // IF Shorts are paying, help them pay with pool rewards
+            market.cumulative_short_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_short_margin));
+        }
+    }
+    Ok((market.cumulative_long_rewards, market.cumulative_short_rewards))
+}
+
+pub fn update_anchor_rewards(storage: &mut dyn Storage, querier: QuerierWrapper, market_addr: Addr) -> Result<Response, ContractError>{
+    let mut market: Market = MARKETS.load(storage, &market_addr.as_bytes())?;
+
+    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(storage, querier, market_addr.clone())?;
+
+    let curr_anchor_index = get_anchor_cumulative(storage, &querier)?;
+
+    market.cumulative_long_rewards = cumulative_long_rewards;
+    market.cumulative_short_rewards = cumulative_short_rewards;
+    market.last_anchor_index = curr_anchor_index;
+
+    MARKETS.save(storage, &market_addr.as_bytes(), &market)?;
+
+    Ok(Response::default())
 }
 
 
