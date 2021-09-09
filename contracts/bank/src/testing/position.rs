@@ -16,10 +16,12 @@ fn add_margin() {
     let info = mock_info("owner", &vec![]);
 
     let msg = InstantiateMsg {
+        anchor_addr: "anchor_addr".to_string(),    
         stable_denom: "uusd".to_string(),
         liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
         liquidation_reward: Decimal256::from_str("0.05").unwrap(),
     };
+
 
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -65,6 +67,7 @@ fn open_position() {
     let info = mock_info("owner", &vec![]);
 
     let msg = InstantiateMsg {
+        anchor_addr: "anchor_addr".to_string(),    
         stable_denom: "uusd".to_string(),
         liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
         liquidation_reward: Decimal256::from_str("0.05").unwrap(),
@@ -109,7 +112,7 @@ fn open_position() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Position { market_addr: "bank0000".to_string(), user_addr: "depositor".to_string() }).unwrap();
     let position: PositionResponse = from_binary(&res).unwrap();
 
-    assert_eq!(position.current_value, Uint256::from(500u128));
+    assert_eq!(position.current_value, Uint256::from(450u128));
     assert_eq!(position.positionSize, Uint256::from(50u128));
 
 }
@@ -122,6 +125,7 @@ fn close_position() {
     let info = mock_info("owner", &vec![]);
 
     let msg = InstantiateMsg {
+        anchor_addr: "anchor_addr".to_string(),    
         stable_denom: "uusd".to_string(),
         liquidation_ratio: Decimal256::from_str("0.0625").unwrap(),
         liquidation_reward: Decimal256::from_str("0.05").unwrap(),

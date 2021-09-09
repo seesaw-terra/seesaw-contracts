@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Uint256,Decimal256};
-use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Querier, QuerierWrapper, QueryRequest, Response, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
+use cosmwasm_std::{Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Querier, QuerierWrapper, QueryRequest, Response, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg, WasmQuery, attr, to_binary};
 use moneymarket::custody::Cw20HookMsg;
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::{query_supply,query_balance};
@@ -67,7 +67,7 @@ pub fn add_margin(
 
     // Send deposit to Anchor
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.anchor_addr.to_string(),
+        contract_addr: deps.api.addr_humanize(&config.anchor_addr)?.to_string(),
         msg: to_binary(&AnchorExecuteMsg::DepositStable { })?,
         funds: vec![Coin {
             amount: Uint128::from(deposit_amount),
@@ -130,7 +130,7 @@ pub fn open_position(
     let state: State = STATE.load(deps.storage)?;
 
     // 3. Update Pool's Anchor Reward Distribution
-    update_anchor_rewards(deps.storage, deps.querier, market_addr.clone());
+    update_anchor_rewards(deps.api, deps.storage, &deps.querier, market_addr.clone());
 
     // 4. Update Market total margins
     match direction {
@@ -158,7 +158,7 @@ pub fn open_position(
     new_position.last_cumulative_short_rewards = market.cumulative_short_rewards;
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
-
+    MARKETS.save(deps.storage, market_addr.as_bytes(), &market);
     // 4. Send swap messages
 
     Ok(Response::new()
@@ -221,12 +221,12 @@ pub fn close_position(
     // Get current anchor exchange rate
 
     let anchor_config: AnchorConfigResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.anchor_addr.to_string(),
+        contract_addr: deps.api.addr_humanize(&config.anchor_addr)?.to_string(),
         msg: to_binary(&AnchorQueryMsg::Config { })?,
     }))?;
 
     let anchor_state: AnchorStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.anchor_addr.to_string(),
+        contract_addr: deps.api.addr_humanize(&config.anchor_addr)?.to_string(),
         msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
     }))?;
 
@@ -235,7 +235,7 @@ pub fn close_position(
     let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: anchor_config.aterra_contract.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: config.anchor_addr.to_string(),
+            contract: deps.api.addr_humanize(&config.anchor_addr)?.to_string(),
             amount: Uint128::from(a_token_to_redeem), 
             msg: to_binary(&AnchorCw20HookMsg::RedeemStable {}
 
@@ -256,7 +256,7 @@ pub fn close_position(
     messages.push(msg);
 
     // 7. Update Pool's Anchor Reward Distribution
-    update_anchor_rewards(deps.storage, deps.querier, market_addr.clone());
+    update_anchor_rewards(deps.api, deps.storage, &deps.querier, market_addr.clone());
 
     // 8. Update Market total margins
     match position.direction {
@@ -286,6 +286,7 @@ pub fn close_position(
     };
 
     POSITIONS.save(deps.storage, (market_addr.as_bytes(), info.sender.as_bytes()), &new_position)?;
+    MARKETS.save(deps.storage, market_addr.as_bytes(), &market);
 
     // 7. Send swap messages
     Ok(Response::new()
@@ -327,7 +328,7 @@ pub fn simulate_close(
 
     // 3. Calculate how much user's funding fees are subsidized by anchor
 
-    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(deps.storage, deps.querier, market_addr)?;
+    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(deps.api, deps.storage, &deps.querier, market_addr)?;
 
     // Get amount of anchor rewards distributed to user
     let anchor_help =  match position.direction {
@@ -516,6 +517,7 @@ pub fn liquidate(
 
 
 pub fn get_anchor_cumulative(
+    api: &dyn Api,
     storage: &dyn Storage,
     querier: &QuerierWrapper
 ) -> StdResult<Decimal256> {
@@ -523,42 +525,46 @@ pub fn get_anchor_cumulative(
     let config = CONFIG.load(storage)?;
 
     let anchor_state: AnchorStateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.anchor_addr.to_string(),
+        contract_addr: api.addr_humanize(&config.anchor_addr)?.to_string(),
         msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
     }))?;
 
     Ok(anchor_state.global_interest_index)
 }
 
-fn get_current_anchor_cumulative_rewards(storage: &dyn Storage, querier: QuerierWrapper, market_addr: Addr) -> StdResult<(Decimal256, Decimal256)> {
+fn get_current_anchor_cumulative_rewards(api: &dyn Api, storage: &dyn Storage, querier: &QuerierWrapper, market_addr: Addr) -> StdResult<(Decimal256, Decimal256)> {
     let vamm_state: VammStateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: market_addr.to_string(),
-        msg: to_binary(&VammQueryMsg::State {  })?,
+        msg: to_binary(&VammQueryMsg::VammState {  })?,
     }))?;
 
     let mut market: Market = MARKETS.load(storage, &market_addr.as_bytes())?;
 
-    let curr_anchor_index = get_anchor_cumulative(storage, &querier)?;
+    let curr_anchor_index = get_anchor_cumulative(api, storage, &querier)?;
 
     match vamm_state.funding_fee.who_pays {
         WhoPays::LONG => {
             // IF Longs are paying, help them pay with pool rewards
-            market.cumulative_long_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_long_margin));
+            if market.total_long_margin > Uint256::zero() {
+                market.cumulative_long_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_long_margin));
+            }
         },
         WhoPays::SHORT => {
             // IF Shorts are paying, help them pay with pool rewards
-            market.cumulative_short_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_short_margin));
+            if market.total_short_margin > Uint256::zero() {
+                market.cumulative_short_rewards += Decimal256::from_uint256(curr_anchor_index / market.last_anchor_index * market.total_margin / Decimal256::from_uint256(market.total_short_margin));
+            }
         }
     }
     Ok((market.cumulative_long_rewards, market.cumulative_short_rewards))
 }
 
-pub fn update_anchor_rewards(storage: &mut dyn Storage, querier: QuerierWrapper, market_addr: Addr) -> Result<Response, ContractError>{
+pub fn update_anchor_rewards(api: &dyn Api, storage: &mut dyn Storage, querier: &QuerierWrapper, market_addr: Addr) -> Result<Response, ContractError>{
     let mut market: Market = MARKETS.load(storage, &market_addr.as_bytes())?;
 
-    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(storage, querier, market_addr.clone())?;
+    let (cumulative_long_rewards, cumulative_short_rewards) = get_current_anchor_cumulative_rewards(api, storage, querier, market_addr.clone())?;
 
-    let curr_anchor_index = get_anchor_cumulative(storage, &querier)?;
+    let curr_anchor_index = get_anchor_cumulative(api, storage, &querier)?;
 
     market.cumulative_long_rewards = cumulative_long_rewards;
     market.cumulative_short_rewards = cumulative_short_rewards;

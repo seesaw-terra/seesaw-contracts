@@ -124,7 +124,7 @@ pub fn update_funding_internal(
 
     let state: VammStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: market_addr.to_string(),
-        msg: to_binary(&VammQueryMsg::State { })?,
+        msg: to_binary(&VammQueryMsg::VammState { })?,
     }))?;
 
     new_market.cumulative_funding_premium = state.funding_premium_cumulative;
@@ -166,14 +166,14 @@ pub fn register_market(
 
     let market_state: VammStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: contract_addr.to_string(),
-        msg: to_binary(&VammQueryMsg::State { })?,
+        msg: to_binary(&VammQueryMsg::VammState { })?,
     }))?;
 
     let config: Config = CONFIG.load(deps.storage)?;
 
     // Get Initial Anchor Index
     let anchor_state: AnchorStateResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.anchor_addr.to_string(),
+        contract_addr: deps.api.addr_humanize(&config.anchor_addr)?.to_string(),
         msg: to_binary(&AnchorQueryMsg::State { block_height: None })?,
     }))?;
 

@@ -32,7 +32,7 @@ pub enum QueryMsg {
     SimulateOut { baseAmount: Uint256, direction: Direction }, // Base amount to Long quote amount
     OraclePrice {},
     MarketPrice {}, // Price of assets in market
-    State {},
+    VammState {},
     MarketInfo {},
     MarketSnapshots {}
 }

@@ -294,7 +294,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => to_binary(&simulate_swapout(deps, baseAmount, &direction)?),
         QueryMsg::OraclePrice {} => to_binary(&query_config(deps)?),
         QueryMsg::MarketPrice {} => to_binary(&query_config(deps)?),
-        QueryMsg::State {} => to_binary(&query_state(deps)?),
+        QueryMsg::VammState {} => to_binary(&query_state(deps)?),
         QueryMsg::MarketInfo {} => to_binary(&query_state(deps)?),
         QueryMsg::MarketSnapshots {} => to_binary(&get_market_snapshots(deps)?),
     }

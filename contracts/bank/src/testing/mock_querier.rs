@@ -1,14 +1,19 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
+use schemars::JsonSchema;
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     from_binary, from_slice, to_binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
+use serde::{Deserialize, Serialize};
+use seesaw::bank::Direction;
 use std::collections::HashMap;
+use std::any::type_name;
 
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 use seesaw::vamm::{Funding, QueryMsg as VammQueryMsg, StateResponse as VammStateResponse, WhoPays};
+use moneymarket::market::{QueryMsg as AnchorQueryMsg, StateResponse as AnchorStateResponse, ConfigResponse as AnchorConfigResponse};
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -35,6 +40,18 @@ pub struct WasmMockQuerier {
 pub struct TokenQuerier {
     // this lets us iterate over all pairs that match the first string
     balances: HashMap<String, HashMap<String, Uint128>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMsg {
+    Config {},
+    VammState {},
+    SimulateIn { quoteAmount: Uint256, direction: Direction },
+    SimulateOut { baseAmount: Uint256, direction: Direction },
+    // State {}, 
+    State { block_height: Option<u64> }
+
 }
 
 impl TokenQuerier {
@@ -100,6 +117,11 @@ impl Querier for WasmMockQuerier {
     }
 }
 
+fn type_of<T>(_: T) -> &'static str {
+    type_name::<T>()
+}
+
+
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
@@ -130,98 +152,65 @@ impl WasmMockQuerier {
             }
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
                 match from_binary(&msg).unwrap() {
-                    VammQueryMsg::State {} => {
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&VammStateResponse {
-                                base_asset_reserve: Uint256::from(1000u128),
-                                quote_asset_reserve: Uint256::from(1_000_000u128),
-                                funding_premium_cumulative: Decimal256::from_uint256(10_000u128),
-                                funding_fee: Funding {
-                                    amount: Decimal256::from_ratio(1, 1000),
-                                    who_pays: WhoPays::LONG
-                                },
-                                market_price: Decimal256::from_uint256(1100u128),
-                                underlying_price: Decimal256::from_uint256(1000u128)
-                            })
-                            .unwrap(),
-                        ))
-                    },
-                    VammQueryMsg::SimulateIn { quoteAmount, direction} => {
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&(quoteAmount / Decimal256::from_uint256(10u128))
-                        ).unwrap(),
-                        ))
-                    },
-                    VammQueryMsg::SimulateOut { baseAmount, direction} => {
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&(baseAmount * Uint256::from(9u128))
-                        ).unwrap(),
-                        ))
-                    }
-
-                    // Cw20QueryMsg::TokenInfo {} => {
-                    //     let balances: &HashMap<String, Uint128> =
-                    //         match self.token_querier.balances.get(contract_addr) {
-                    //             Some(balances) => balances,
-                    //             None => {
-                    //                 return SystemResult::Err(SystemError::InvalidRequest {
-                    //                     error: format!(
-                    //                         "No balance info exists for the contract {}",
-                    //                         contract_addr
-                    //                     ),
-                    //                     request: msg.as_slice().into(),
-                    //                 })
-                    //             }
-                    //         };
-
-                    //     let mut total_supply = Uint128::zero();
-
-                    //     for balance in balances {
-                    //         total_supply += *balance.1;
-                    //     }
-
-                    //     SystemResult::Ok(ContractResult::Ok(
-                    //         to_binary(&TokenInfoResponse {
-                    //             name: "mAAPL".to_string(),
-                    //             symbol: "mAAPL".to_string(),
-                    //             decimals: 6,
-                    //             total_supply,
-                    //         })
-                    //         .unwrap(),
-                    //     ))
-                    // }
-                    // Cw20QueryMsg::Balance { address } => {
-                    //     let balances: &HashMap<String, Uint128> =
-                    //         match self.token_querier.balances.get(contract_addr) {
-                    //             Some(balances) => balances,
-                    //             None => {
-                    //                 return SystemResult::Err(SystemError::InvalidRequest {
-                    //                     error: format!(
-                    //                         "No balance info exists for the contract {}",
-                    //                         contract_addr
-                    //                     ),
-                    //                     request: msg.as_slice().into(),
-                    //                 })
-                    //             }
-                    //         };
-
-                    //     let balance = match balances.get(&address) {
-                    //         Some(v) => *v,
-                    //         None => {
-                    //             return SystemResult::Ok(ContractResult::Ok(
-                    //                 to_binary(&Cw20BalanceResponse {
-                    //                     balance: Uint128::zero(),
-                    //                 })
-                    //                 .unwrap(),
-                    //             ));
-                    //         }
-                    //     };
-
-                    //     SystemResult::Ok(ContractResult::Ok(
-                    //         to_binary(&Cw20BalanceResponse { balance }).unwrap(),
-                    //     ))
-                    // }
-                    _ => panic!("DO NOT ENTER HERE"),
+                        QueryMsg::VammState {} => {
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&VammStateResponse {
+                                    base_asset_reserve: Uint256::from(1000u128),
+                                    quote_asset_reserve: Uint256::from(1_000_000u128),
+                                    funding_premium_cumulative: Decimal256::from_uint256(10_000u128),
+                                    funding_fee: Funding {
+                                        amount: Decimal256::from_ratio(1, 1000),
+                                        who_pays: WhoPays::LONG
+                                    },
+                                    market_price: Decimal256::from_uint256(1100u128),
+                                    underlying_price: Decimal256::from_uint256(1000u128)
+                                })
+                                .unwrap(),
+                            ))
+                        },
+                        QueryMsg::Config {} => {
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&AnchorConfigResponse {
+                                    owner_addr: "owner".to_string(),
+                                    aterra_contract: "aterra".to_string(),
+                                    interest_model: "interest".to_string(),
+                                    distribution_model: "dist".to_string(),
+                                    overseer_contract: "over".to_string(),
+                                    collector_contract: "collector".to_string(),
+                                    distributor_contract: "dist".to_string(),
+                                    stable_denom: "uusd".to_string(),
+                                    max_borrow_factor: Decimal256::one(),
+                                }).unwrap()
+                            ))
+                        }
+                        QueryMsg::SimulateIn { quoteAmount, direction} => {
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&(quoteAmount / Decimal256::from_uint256(10u128))
+                            ).unwrap(),
+                            ))
+                        },
+                        QueryMsg::SimulateOut { baseAmount, direction} => {
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&(baseAmount * Uint256::from(9u128))
+                            ).unwrap(),
+                            ))
+                        },
+                        QueryMsg::State { block_height } => {
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&AnchorStateResponse {
+                                    total_liabilities: Decimal256::zero(),
+                                    total_reserves: Decimal256::zero(),
+                                    last_interest_updated: 1u64,
+                                    last_reward_updated: 0u64,
+                                    global_interest_index: Decimal256::one(),
+                                    global_reward_index: Decimal256::zero(),
+                                    anc_emission_rate: Decimal256::zero(),
+                                    prev_aterra_supply: Uint256::zero(),
+                                    prev_exchange_rate: Decimal256::zero(),
+                                }).unwrap()
+                            ))
+                        }
+                        _ => panic!("DO NOT ENTER HERE"),
                 }
             }
             _ => self.base.handle_query(request),
