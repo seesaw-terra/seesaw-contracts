@@ -31,7 +31,8 @@ pub struct State {
     pub base_asset_reserve: Uint256,
     pub funding_period: Uint256,
     pub aggregated_funding: Decimal256,
-    pub funding_rate: Funding
+    pub funding_rate: Funding,
+    pub last_funding_time: Uint256
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

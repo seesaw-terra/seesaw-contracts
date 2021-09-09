@@ -41,7 +41,8 @@ pub fn instantiate(
         funding_rate: Funding {
             amount: Decimal256::zero(),
             who_pays: WhoPays::LONG
-        }
+        },
+        last_funding_time: Uint256::zero()
     };
 
     STATE.save(deps.storage, &state)?;
@@ -124,23 +125,30 @@ pub fn settle_funding(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-
+    
     let config: Config = CONFIG.load(deps.storage)?;
 
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.bank_addr {
         return Err(ContractError::Unauthorized {});
     }
 
+    let state: State = STATE.load(deps.storage)?;
+
+    if state.last_funding_time + state.funding_period * Uint256::from(1_000_000u128) < Uint256::from(env.block.time.nanos()) {
+        return Err(ContractError::NotTime {})
+    }
+
+    let mut new_state = state.clone();
+
+    // Update last funding time
+    new_state.last_funding_time = state.last_funding_time + state.funding_period * Uint256::from(1_000_000u128);
+
     let spot_price = get_underlying_price(deps.as_ref())?;
     let mark_price = get_market_price(deps.as_ref())?;
-
-    let state: State = STATE.load(deps.storage)?;
 
     let millis_day: u128 = 24 * 60 * 60 * 1000;
 
     // let premium: Decimal256 = spot_price - mark_price;
-
-    let mut new_state = state.clone();
 
     let (premium, who_pays) = if spot_price > mark_price {
         (spot_price - mark_price, WhoPays::SHORT)
