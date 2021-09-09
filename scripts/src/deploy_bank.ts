@@ -4,7 +4,8 @@ import { mainWallet, init, upload, execute } from './utils';
     const bank_codeId = await upload(mainWallet,'../../artifacts/bank.wasm')
     await delay(1000)
 
-    const bank_addr = await init(mainWallet, bank_codeId, { 
+    const bank_addr = await init(mainWallet, bank_codeId, {
+        anchor_addr: 'terra15dwd5mj8v59wpj0wvt233mf5efdff808c5tkal',
         stable_denom: 'uusd',
         liquidation_reward: '0.05',
         liquidation_ratio: '0.0625'
