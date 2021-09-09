@@ -16,6 +16,7 @@ pub enum Direction {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct InstantiateMsg {
+    pub anchor_addr: String,
     pub liquidation_reward: Decimal256,
     pub liquidation_ratio: Decimal256,
     pub stable_denom: String
@@ -82,9 +83,7 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct StateResponse {
-    pub last_cumulative_funding_fee: u64,
-}
+pub struct StateResponse { }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
