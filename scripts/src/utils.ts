@@ -38,7 +38,7 @@ import {
             fs.readFileSync(path, { encoding: "base64" })
           ),
         ],
-        fee: new StdFee(gasLimit, "2000000uusd"),
+        fee: new StdFee(gasLimit, "20000000uusd"),
       });
       const result = await terra.tx.broadcast(tx);
       if (

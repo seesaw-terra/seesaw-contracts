@@ -254,4 +254,3 @@ fn query_position(deps: Deps, amm_addr: Addr, user_addr: Addr) -> StdResult<Posi
         funding: funding_response
     })
 }
-

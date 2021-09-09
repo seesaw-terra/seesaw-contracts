@@ -21,8 +21,8 @@ const { expect } = chai;
 // Variables
 //----------------------------------------------------------------------------------------
 
-let bankAddr: string = 'terra14ad9fgkam278tr27u6wrstlxdzutpqh52xwll2';
-let vammAddr: string = 'terra1qr59t3nzj5lm9pmd5zx6qjhy0j4n8vq38w3kze';
+let bankAddr: string = 'terra1t9utwkw6d83yl2ukwt7afxjfyu6eh6g72zjaqy';
+let vammAddr: string = 'terra1t5lvzz3djndhrx0auwkjh8yz8xwd52s78llr0r';
 let walletAddr: string = 'terra1gfu9uymnr04amjtssfamzymuwna303awyz9kch';
 
 //----------------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ async function testAddMargin() {
   const res = await execute(mainWallet, bankAddr, {
     deposit_stable: {
       market_addr: vammAddr
-    }},'100000uusd' // UST value of margin
+    }},'10000000uusd' // UST value of margin
   )
 
   const poolUUsd = await queryNativeTokenBalance(terra, bankAddr, "uusd");
@@ -55,7 +55,7 @@ async function testOpenPosition() {
   const open_res = await execute(mainWallet, bankAddr, {
     open_position: {
       market_addr: vammAddr,
-      open_value: "200000", //UST value of position
+      open_value: "200000000", //UST value of position
       direction: "l_o_n_g"
     }}
   )
@@ -90,6 +90,28 @@ async function testClosePosition() {
   console.log(position_res)
 
 }
+
+async function testLiquidate() {
+  const open_res = await execute(mainWallet, bankAddr, {
+    liquidate: {
+      market_addr: vammAddr,
+      holder_addr: walletAddr
+    }}
+  )
+  console.log(open_res)
+
+  const position_res = await query(bankAddr, {
+    position: {
+      market_addr: vammAddr,
+      user_addr: walletAddr
+    }
+    }
+  )
+  console.log(position_res)
+
+}
+
+
 
 
 async function queryState() {
@@ -129,12 +151,14 @@ async function queryPosition() {
 
 
 async function main() {
-  await testAddMargin();
-  await testOpenPosition()
+  await testLiquidate();
+  // settleFunding();
+  // await testAddMargin();
+  // await testOpenPosition();
   // await testClosePosition();
   // await querySnapshots();
   // await queryState();
-  await queryPosition()
+  // await queryPosition()
 }
 
 main()

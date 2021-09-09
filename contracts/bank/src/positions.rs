@@ -362,26 +362,29 @@ pub fn liquidate(
 
     let margin_to_holders = margin_adjusted - margin_to_liquidators;
 
-
-    /// 5. Transfer margin to liquidators wallet.
-    let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
-        to_address: info.sender.to_string(),
-        amount: vec![Coin {
-            denom: config.stable_denom.clone(),
-            amount: Uint128::from(margin_to_liquidators),
-        }],
-    });
+    if margin_to_liquidators > Uint256::zero() {
+        /// 5. Transfer margin to liquidators wallet.
+        let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: info.sender.to_string(),
+            amount: vec![Coin {
+                denom: config.stable_denom.clone(),
+                amount: Uint128::from(margin_to_liquidators),
+            }],
+        });
+        messages.push(msg);
+    }
     
-    /// 6. Transfer margin to holders wallet.
-    let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
-        to_address: holder_addr.to_string(),
-        amount: vec![Coin {
-            denom: config.stable_denom.clone(),
-            amount: Uint128::from(margin_to_holders),
-        }],
-    });
-
-    messages.push(msg);
+    if margin_to_holders > Uint256::zero() {
+        /// 6. Transfer margin to holders wallet.
+        let msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: holder_addr.to_string(),
+            amount: vec![Coin {
+                denom: config.stable_denom.clone(),
+                amount: Uint128::from(margin_to_holders),
+            }],
+        });
+        messages.push(msg);
+    }
     
     // 7. Clear the position
     let mut new_position = Position {
